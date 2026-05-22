@@ -38,6 +38,10 @@ const app = new Elysia()
     set.status = 500;
     return { code: "INTERNAL_ERROR", message: "An unexpected error occurred" };
   })
+  .get("/chat", async () => {
+    const html = await Bun.file(new URL("./chat/chat.html", import.meta.url)).text();
+    return new Response(html, { headers: { "content-type": "text/html" } });
+  })
   .use(healthRoutes)
   .use(chatRoutes(db))
   .use(wsHub(db, logger))

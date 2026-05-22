@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code Chat</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; height: 100vh; display: flex; flex-direction: column; }
+    .header { background: #16213e; padding: 12px 20px; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 18px; color: #6366f1; }
+    .connect-form { background: #16213e; padding: 12px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .connect-form input { background: #0f3460; border: 1px solid #333; color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 14px; }
+    .connect-form input::placeholder { color: #666; }
+    .connect-form button { padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer; font-size: 14px; font-weight: 600; }
+    #connect-btn { background: #10b981; color: #fff; }
+    #connect-btn:hover { background: #059669; }
+    #disconnect-btn { background: #ef4444; color: #fff; display: none; }
+    .status { font-size: 12px; color: #666; margin-left: auto; }
+    .status.connected { color: #10b981; }
+    .messages { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 4px; }
+    .msg { padding: 6px 10px; border-radius: 6px; max-width: 80%; font-size: 14px; line-height: 1.4; }
+    .msg .sender { font-weight: 600; margin-right: 6px; }
+    .msg .time { font-size: 11px; color: #666; margin-right: 6px; }
+    .msg.self { background: #1e3a5f; align-self: flex-end; }
+    .msg.other { background: #2d2d44; align-self: flex-start; }
+    .msg.system { background: #3d3400; align-self: center; font-style: italic; color: #fbbf24; }
+    .input-bar { background: #16213e; padding: 12px 20px; display: flex; gap: 8px; }
+    .input-bar input { flex: 1; background: #0f3460; border: 1px solid #333; color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 14px; }
+    #send-btn { background: #6366f1; color: #fff; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 600; }
+    #send-btn:hover { background: #4f46e5; }
+    #stop-btn { background: #ef4444; color: #fff; padding: 10px 20px; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; font-size: 14px; }
+    #stop-btn:hover { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Claude Code Chat</h1>
+    <span class="status" id="status">Disconnected</span>
+  </div>
+  <div class="connect-form" id="connect-form">
+    <input id="api-key-input" placeholder="API Key" value="dev-api-key-change-me" />
+    <input id="room-input" placeholder="Room ID (UUID)" />
+    <input id="name-input" placeholder="Your name" value="human" />
+    <button id="connect-btn">Connect</button>
+    <button id="disconnect-btn">Disconnect</button>
+  </div>
+  <div class="messages" id="messages"></div>
+  <div class="input-bar">
+    <input id="message-input" placeholder="Type a message..." disabled />
+    <button id="send-btn" disabled>Send</button>
+    <button id="stop-btn" disabled>STOP ALL</button>
+  </div>
+
+  <script>
+    let ws = null;
+    let myName = '';
+    let roomId = '';
+
+    const msgArea = document.getElementById('messages');
+    const msgInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const statusEl = document.getElementById('status');
+
+    function addMessage(text, sender, type, timestamp) {
+      const div = document.createElement('div');
+      const cls = type === 'system' ? 'system' : (sender === myName ? 'self' : 'other');
+      div.className = 'msg ' + cls;
+      const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+      if (type === 'system') {
+        div.innerHTML = '<span class="time">[' + time + ']</span> ' + text;
+      } else {
+        div.innerHTML = '<span class="time">[' + time + ']</span><span class="sender">' + sender + ':</span> ' + text;
+      }
+      msgArea.appendChild(div);
+      msgArea.scrollTop = msgArea.scrollHeight;
+    }
+
+    connectBtn.onclick = function() {
+      const apiKey = document.getElementById('api-key-input').value;
+      roomId = document.getElementById('room-input').value;
+      myName = document.getElementById('name-input').value || 'human';
+
+      if (!apiKey || !roomId) { alert('API Key and Room ID are required'); return; }
+
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const base = location.host;
+      const url = protocol + '//' + base + '/ws?apiKey=' + encodeURIComponent(apiKey) + '&name=' + encodeURIComponent(myName);
+
+      ws = new WebSocket(url);
+
+      ws.onopen = function() {
+        statusEl.textContent = 'Connected as ' + myName;
+        statusEl.className = 'status connected';
+        connectBtn.style.display = 'none';
+        disconnectBtn.style.display = 'inline';
+        msgInput.disabled = false;
+        sendBtn.disabled = false;
+        stopBtn.disabled = false;
+        addMessage('Connected to hub', '', 'system');
+      };
+
+      ws.onmessage = function(event) {
+        var msg = JSON.parse(event.data);
+        if (msg.type === 'registered') {
+          ws.send(JSON.stringify({ type: 'join_room', roomId: roomId }));
+          return;
+        }
+        if (msg.type === 'room_joined') {
+          addMessage('Joined room ' + roomId, '', 'system');
+          return;
+        }
+        if (msg.type === 'message') {
+          addMessage(msg.text, msg.from, 'message', msg.timestamp);
+          return;
+        }
+        if (msg.type === 'participant_joined') {
+          addMessage(msg.name + ' joined the room', '', 'system');
+          return;
+        }
+        if (msg.type === 'participant_left') {
+          addMessage(msg.name + ' left the room', '', 'system');
+          return;
+        }
+      };
+
+      ws.onclose = function() {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'status';
+        connectBtn.style.display = 'inline';
+        disconnectBtn.style.display = 'none';
+        msgInput.disabled = true;
+        sendBtn.disabled = true;
+        stopBtn.disabled = true;
+        addMessage('Disconnected', '', 'system');
+      };
+    };
+
+    disconnectBtn.onclick = function() { if (ws) ws.close(); };
+
+    function sendMessage(text) {
+      if (!ws || !roomId || !text) return;
+      ws.send(JSON.stringify({ type: 'message', roomId: roomId, text: text }));
+      addMessage(text, myName, 'message');
+    }
+
+    sendBtn.onclick = function() {
+      var text = msgInput.value.trim();
+      if (text) { sendMessage(text); msgInput.value = ''; }
+    };
+
+    msgInput.onkeydown = function(e) {
+      if (e.key === 'Enter') sendBtn.onclick();
+    };
+
+    stopBtn.onclick = function() {
+      sendMessage('STOP');
+      addMessage('STOP command sent', '', 'system');
+    };
+  </script>
+</body>
+</html>

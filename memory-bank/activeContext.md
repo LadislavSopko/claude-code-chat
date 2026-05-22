@@ -17,7 +17,8 @@
 [NEXT:SECURITY:BLOCCANTI:PRE-DEPLOY]
 ?1::BetterAuth+GoogleLogin+ADMIN_EMAIL:env+JWT:session:for:humans
 @auth:decision::human→Google:OAuth→JWT:session(BetterAuth)+WS:uses:JWT
-@auth:decision::agent→JWT:signed:with:claims{expiry+scope+name}+revoca:check:in:DB:at:connect+admin:console:CRUD
+@auth:decision::agent→JWT:as:format{claims:inside}+row:in:DB:per:token+revoca=DELETE:row+check:DB:every:connect(¬stateless)+close:active:WS:on:revoke+pin:algo(¬alg:none)+admin:console:CRUD
+@auth:rule::JWT:is:envelope:only→DB:is:source:of:truth→never:trust:signature:alone
 ?2::Whitelist:email{table+auth:hook}
 ?3::Roles:from:auth:session{¬auto-declared}
 ?4::API:key:admin:console{CRUD+revoca+scadenza}

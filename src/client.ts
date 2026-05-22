@@ -20,17 +20,19 @@ const mcp = new McpServer(
 
 const pendingResponses = new Map<string, (data: unknown) => void>();
 
+const wsHolder: { ws: WebSocket | null } = { ws: null };
+
+registerMcpTools(mcp, wsHolder, pendingResponses);
+
 const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
 const wsUrl = `${hubUrl}/ws?apiKey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(name)}`;
-const ws = new WebSocket(wsUrl);
+wsHolder.ws = new WebSocket(wsUrl);
 
-registerMcpTools(mcp, ws, pendingResponses);
+wsHolder.ws.onopen = () => {};
 
-ws.onopen = () => {};
-
-ws.onmessage = async (event) => {
+wsHolder.ws.onmessage = async (event) => {
   const msg = JSON.parse(event.data as string);
 
   if (msg.type === "registered") return;
@@ -69,12 +71,12 @@ ws.onmessage = async (event) => {
   }
 };
 
-ws.onerror = () => {
+wsHolder.ws.onerror = () => {
   console.error("WebSocket error — is the hub running?");
   process.exit(1);
 };
 
-ws.onclose = () => {
+wsHolder.ws.onclose = () => {
   console.error("hub connection closed");
   process.exit(1);
 };

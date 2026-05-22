@@ -16,15 +16,24 @@ export function registerTools(): ToolRegistry {
   return { tools };
 }
 
+export interface WsHolder {
+  ws: WebSocket | null;
+}
+
 export function registerMcpTools(
   mcp: McpServer,
-  ws: WebSocket,
+  wsHolder: WsHolder,
   pendingResponses: Map<string, (data: unknown) => void>
 ): void {
+  function getWs(): WebSocket {
+    if (!wsHolder.ws) throw new Error("WebSocket not connected yet");
+    return wsHolder.ws;
+  }
+
   function sendAndWait(msg: object, responseType: string): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       pendingResponses.set(responseType, resolve as (data: unknown) => void);
-      ws.send(JSON.stringify(msg));
+      getWs().send(JSON.stringify(msg));
       setTimeout(() => {
         if (pendingResponses.has(responseType)) {
           pendingResponses.delete(responseType);
@@ -65,7 +74,7 @@ export function registerMcpTools(
       text: z.string().describe("Message text"),
     },
   }, async ({ roomId, text }) => {
-    ws.send(JSON.stringify({ type: "message", roomId, text }));
+    getWs().send(JSON.stringify({ type: "message", roomId, text }));
     return { content: [{ type: "text" as const, text: `Message sent to room ${roomId}` }] };
   });
 

@@ -23,7 +23,8 @@ export interface WsHolder {
 export function registerMcpTools(
   mcp: McpServer,
   wsHolder: WsHolder,
-  pendingResponses: Map<string, (data: unknown) => void>
+  pendingResponses: Map<string, (data: unknown) => void>,
+  joinedRooms: string[],
 ): void {
   function getWs(): WebSocket {
     if (!wsHolder.ws) throw new Error("WebSocket not connected yet");
@@ -52,30 +53,49 @@ export function registerMcpTools(
   });
 
   mcp.registerTool("join_room", {
-    description: "Join a chat room to send and receive messages.",
-    inputSchema: { roomId: z.string().describe("Room ID (UUID)") },
-  }, async ({ roomId }) => {
-    await sendAndWait({ type: "join_room", roomId }, "room_joined");
-    return { content: [{ type: "text" as const, text: `Joined room ${roomId}` }] };
+    description: "Join a chat room by name (auto-creates if not exists) or by roomId.",
+    inputSchema: {
+      name: z.string().optional().describe("Room name (auto-creates if not exists)"),
+      roomId: z.string().optional().describe("Room ID (UUID) — alternative to name"),
+    },
+  }, async ({ name, roomId }) => {
+    const msg = name ? { type: "join_room", name } : { type: "join_room", roomId };
+    const res = await sendAndWait(msg, "room_joined");
+    const roomName = (res.roomName as string) || name || roomId || "";
+    if (!joinedRooms.includes(roomName)) joinedRooms.push(roomName);
+    return { content: [{ type: "text" as const, text: `Joined room ${roomName} (${res.roomId})` }] };
   });
 
   mcp.registerTool("leave_room", {
-    description: "Leave a chat room.",
-    inputSchema: { roomId: z.string().describe("Room ID (UUID)") },
-  }, async ({ roomId }) => {
-    await sendAndWait({ type: "leave_room", roomId }, "room_left");
-    return { content: [{ type: "text" as const, text: `Left room ${roomId}` }] };
+    description: "Leave a chat room by name or roomId.",
+    inputSchema: {
+      name: z.string().optional().describe("Room name"),
+      roomId: z.string().optional().describe("Room ID (UUID)"),
+    },
+  }, async ({ name, roomId }) => {
+    const msg = name ? { type: "leave_room", name } : { type: "leave_room", roomId };
+    await sendAndWait(msg, "room_left");
+    const idx = joinedRooms.indexOf(name || roomId || "");
+    if (idx >= 0) joinedRooms.splice(idx, 1);
+    return { content: [{ type: "text" as const, text: `Left room ${name || roomId}` }] };
   });
 
   mcp.registerTool("send_message", {
-    description: "Send a message to a room. All room members will receive it.",
+    description: "Send a message to a room. Omit 'to' for broadcast, set 'to' for DM (only recipient + owners see it).",
     inputSchema: {
-      roomId: z.string().describe("Room ID (UUID)"),
+      name: z.string().optional().describe("Room name"),
+      roomId: z.string().optional().describe("Room ID (UUID) — alternative to name"),
       text: z.string().describe("Message text"),
+      to: z.string().optional().describe("Recipient name for DM (optional, omit for broadcast)"),
     },
-  }, async ({ roomId, text }) => {
-    getWs().send(JSON.stringify({ type: "message", roomId, text }));
-    return { content: [{ type: "text" as const, text: `Message sent to room ${roomId}` }] };
+  }, async ({ name, roomId, text, to }) => {
+    const msg: Record<string, unknown> = { type: "message", text };
+    if (name) msg.name = name;
+    else if (roomId) msg.roomId = roomId;
+    if (to) msg.to = to;
+    getWs().send(JSON.stringify(msg));
+    const target = to ? ` (DM to ${to})` : "";
+    return { content: [{ type: "text" as const, text: `Message sent to ${name || roomId}${target}` }] };
   });
 
   mcp.registerTool("list_rooms", {
@@ -88,11 +108,16 @@ export function registerMcpTools(
   });
 
   mcp.registerTool("list_participants", {
-    description: "List participants in a chat room.",
-    inputSchema: { roomId: z.string().describe("Room ID (UUID)") },
-  }, async ({ roomId }) => {
-    const res = await sendAndWait({ type: "list_participants", roomId }, "participants");
-    const names = (res.names as string[]) || [];
-    return { content: [{ type: "text" as const, text: names.join(", ") || "(no participants)" }] };
+    description: "List participants in a chat room with their roles.",
+    inputSchema: {
+      name: z.string().optional().describe("Room name"),
+      roomId: z.string().optional().describe("Room ID (UUID) — alternative to name"),
+    },
+  }, async ({ name, roomId }) => {
+    const msg = name ? { type: "list_participants", name } : { type: "list_participants", roomId };
+    const res = await sendAndWait(msg, "participants");
+    const participants = (res.participants as Array<{ name: string; role: string }>) || [];
+    const text = participants.map((p) => `${p.name} [${p.role}]`).join(", ") || "(no participants)";
+    return { content: [{ type: "text" as const, text }] };
   });
 }

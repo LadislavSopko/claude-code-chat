@@ -1,0 +1,47 @@
+{
+  "schema": "lsai.mjsf/1",
+  "generatedAt": "2026-05-22T08:28:18Z",
+  "generatedBy": {
+    "tool": "lsai-analyzer",
+    "version": "1.0.177"
+  },
+  "workspace": {
+    "root": "/home/laco/claude-code-chat",
+    "name": "claude-code-chat"
+  },
+  "tools": {
+    "typescript-language-server": {
+      "version": "",
+      "path": "/mnt/c/nvm4w/nodejs/typescript-language-server",
+      "args": [
+        "--stdio"
+      ]
+    },
+    "intelephense": {
+      "version": "",
+      "path": "/home/laco/.lsai/servers/intelephense/node_modules/.bin/intelephense",
+      "args": [
+        "--stdio"
+      ]
+    },
+    "rust-analyzer": {
+      "version": "",
+      "path": "/home/laco/.cargo/bin/rust-analyzer",
+      "args": []
+    }
+  },
+  "projects": [
+    {
+      "id": "javascript:",
+      "name": "claude-code-chat",
+      "language": "javascript",
+      "root": ".",
+      "buildSystem": "npm",
+      "sourceRoots": [],
+      "resourceRoots": [],
+      "testRoots": [],
+      "outputRoots": []
+    }
+  ],
+  "plugins": {}
+}

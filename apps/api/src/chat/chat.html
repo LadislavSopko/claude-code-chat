@@ -39,21 +39,30 @@
     #disconnect-btn { background: #dc2626; color: #fff; display: none; }
     .room-name-tag { background: #6366f1; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; display: none; }
 
+    .chat-body { flex: 1; display: flex; overflow: hidden; }
     .messages { flex: 1; overflow-y: auto; padding: 10px 24px; display: flex; flex-direction: column; gap: 4px; }
     .messages::-webkit-scrollbar { width: 6px; }
     .messages::-webkit-scrollbar-track { background: transparent; }
     .messages::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 
+    #participants { width: 180px; background: #1e293b; border-left: 1px solid #334155; padding: 12px; overflow-y: auto; display: none; }
+    #participants h3 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .participant { padding: 4px 8px; border-radius: 4px; font-size: 13px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+    .participant .dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; }
+    .participant .role { font-size: 10px; color: #64748b; margin-left: auto; }
+
     .msg { padding: 6px 10px; border-radius: 10px; max-width: 75%; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
     .msg .meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
     .msg .sender { font-weight: 700; font-size: 13px; }
     .msg .time { font-size: 11px; color: #64748b; }
+    .msg .dm-tag { font-size: 10px; color: #c084fc; background: #3b0764; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
     .msg .text { white-space: pre-wrap; }
 
     .msg.self { background: #1e3a5f; align-self: flex-end; border-bottom-right-radius: 4px; }
     .msg.self .sender { color: #60a5fa; }
     .msg.other { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #334155; }
     .msg.other .sender { color: #a78bfa; }
+    .msg.dm { border-left: 3px solid #a855f7; }
     .msg.system { background: transparent; align-self: center; font-size: 12px; color: #64748b; padding: 4px 12px; border: 1px solid #334155; border-radius: 20px; }
 
     .msg.other[data-sender="researcher"] .sender { color: #34d399; }
@@ -83,7 +92,13 @@
     <button id="connect-btn">Connect</button>
     <button id="disconnect-btn">Disconnect</button>
   </div>
-  <div class="messages" id="messages"></div>
+  <div class="chat-body">
+    <div class="messages" id="messages"></div>
+    <div id="participants">
+      <h3>Online</h3>
+      <div id="participants-list"></div>
+    </div>
+  </div>
   <div class="input-bar">
     <input id="message-input" placeholder="Type a message..." disabled />
     <button id="send-btn" disabled>Send</button>
@@ -96,6 +111,7 @@
     var roomId = '';
     var roomName = '';
     var apiKey = '';
+    var participantsTimer = null;
 
     var msgArea = document.getElementById('messages');
     var msgInput = document.getElementById('message-input');
@@ -108,6 +124,8 @@
     var newRoomName = document.getElementById('new-room-name');
     var newRoomBtn = document.getElementById('new-room-btn');
     var roomTag = document.getElementById('room-tag');
+    var participantsPanel = document.getElementById('participants');
+    var participantsList = document.getElementById('participants-list');
 
     function escapeHtml(str) {
       var d = document.createElement('div');
@@ -115,10 +133,11 @@
       return d.innerHTML;
     }
 
-    function addMessage(text, sender, type, timestamp) {
+    function addMessage(text, sender, type, timestamp, dm) {
       var div = document.createElement('div');
       var cls = type === 'system' ? 'system' : (sender === myName ? 'self' : 'other');
       div.className = 'msg ' + cls;
+      if (dm) div.className += ' dm';
       if (sender && sender !== myName) div.setAttribute('data-sender', sender);
       var time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
       if (type === 'system') {
@@ -126,7 +145,8 @@
       } else {
         var meta = document.createElement('div');
         meta.className = 'meta';
-        meta.innerHTML = '<span class="sender">' + escapeHtml(sender) + '</span><span class="time">' + time + '</span>';
+        var dmTag = dm ? '<span class="dm-tag">DM</span>' : '';
+        meta.innerHTML = '<span class="sender">' + escapeHtml(sender) + '</span><span class="time">' + time + '</span>' + dmTag;
         var body = document.createElement('div');
         body.className = 'text';
         var html = typeof marked !== 'undefined' ? marked.parse(text) : escapeHtml(text);
@@ -141,6 +161,21 @@
       }
       msgArea.appendChild(div);
       msgArea.scrollTop = msgArea.scrollHeight;
+    }
+
+    function refreshParticipants() {
+      if (!ws || !roomId) return;
+      ws.send(JSON.stringify({ type: 'list_participants', roomId: roomId }));
+    }
+
+    function renderParticipants(list) {
+      participantsList.innerHTML = '';
+      list.forEach(function(p) {
+        var div = document.createElement('div');
+        div.className = 'participant';
+        div.innerHTML = '<span class="dot"></span>' + escapeHtml(p.name) + '<span class="role">' + p.role + '</span>';
+        participantsList.appendChild(div);
+      });
     }
 
     function saveSession() {
@@ -166,7 +201,6 @@
             var opt = document.createElement('option');
             opt.value = r.id;
             opt.textContent = r.name;
-            opt.setAttribute('data-name', r.name);
             roomSelect.appendChild(opt);
           });
           var session = loadSession();
@@ -210,6 +244,7 @@
         statusEl.className = 'status connected';
         roomTag.textContent = roomName || roomId;
         roomTag.style.display = 'inline';
+        participantsPanel.style.display = 'block';
         connectBtn.style.display = 'none';
         disconnectBtn.style.display = 'inline';
         msgInput.disabled = false;
@@ -229,25 +264,44 @@
             headers: { 'Authorization': 'Bearer ' + apiKey }
           }).then(function(r) { return r.json(); }).then(function(msgs) {
             if (msgs && msgs.length) {
-              msgs.forEach(function(m) { addMessage(m.text, m.fromName, 'message', m.createdAt); });
+              msgs.forEach(function(m) { addMessage(m.text, m.fromName, 'message', m.createdAt, !!m.toName); });
             }
           });
+          refreshParticipants();
+          participantsTimer = setInterval(refreshParticipants, 10000);
           return;
         }
-        if (msg.type === 'message') { addMessage(msg.text, msg.from, 'message', msg.timestamp); return; }
-        if (msg.type === 'participant_joined') { addMessage(msg.name + ' joined', '', 'system'); return; }
-        if (msg.type === 'participant_left') { addMessage(msg.name + ' left', '', 'system'); return; }
+        if (msg.type === 'participants') {
+          renderParticipants(msg.participants || []);
+          return;
+        }
+        if (msg.type === 'message') {
+          addMessage(msg.text, msg.from, 'message', msg.timestamp, !!msg.dm);
+          return;
+        }
+        if (msg.type === 'participant_joined') {
+          addMessage(msg.name + ' joined', '', 'system');
+          refreshParticipants();
+          return;
+        }
+        if (msg.type === 'participant_left') {
+          addMessage(msg.name + ' left', '', 'system');
+          refreshParticipants();
+          return;
+        }
       };
 
       ws.onclose = function() {
         statusEl.textContent = 'Disconnected';
         statusEl.className = 'status';
         roomTag.style.display = 'none';
+        participantsPanel.style.display = 'none';
         connectBtn.style.display = 'inline';
         disconnectBtn.style.display = 'none';
         msgInput.disabled = true;
         sendBtn.disabled = true;
         stopBtn.disabled = true;
+        if (participantsTimer) { clearInterval(participantsTimer); participantsTimer = null; }
       };
     }
 
@@ -272,7 +326,6 @@
       addMessage('STOP command sent', '', 'system');
     };
 
-    // Auto-restore session on page load
     loadRooms();
     var session = loadSession();
     if (session) {

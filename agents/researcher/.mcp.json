@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "claude-chat": {
+      "command": "/home/laco/.bun/bin/bun",
+      "args": ["/home/laco/claude-code-chat/src/client.ts"],
+      "env": {
+        "CLAUDE_CHAT_NAME": "researcher",
+        "CLAUDE_CHAT_API_KEY": "dev-api-key-change-me",
+        "CLAUDE_CHAT_URL": "ws://localhost:3000"
+      }
+    }
+  }
+}

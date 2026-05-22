@@ -19,11 +19,20 @@
       ]
     },
     "claude-chat": {
-      "command": "bun",
+      "command": "/home/laco/.bun/bin/bun",
       "args": ["src/client.ts"],
       "env": {
-        "CLAUDE_CHAT_NAME": "default",
-        "CLAUDE_CHAT_BROKER": "ws://localhost:4000"
+        "CLAUDE_CHAT_NAME": "claude",
+        "CLAUDE_CHAT_API_KEY": "dev-api-key-change-me",
+        "CLAUDE_CHAT_URL": "ws://localhost:3000"
+      }
+    },
+    "ui-ticket-mcp": {
+      "command": "uvx",
+      "args": ["ui-ticket-mcp"],
+      "env": {
+        "PROJECT_ROOT": "/home/laco/claude-code-chat",
+        "REVIEW_PORT": "3210"
       }
     },
     "lsai": {

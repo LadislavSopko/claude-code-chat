@@ -4,14 +4,12 @@ import { cors } from "@elysiajs/cors";
 import { loadConfig } from "./common/config";
 import { createLogger } from "./common/logger";
 import { createDb } from "./db";
-import { createAuth } from "./auth";
 import { healthRoutes } from "./health";
 import { chatRoutes } from "./chat";
 
 const config = loadConfig();
 const logger = createLogger(config);
 const db = createDb(config.DATABASE_URL);
-const auth = createAuth(db, config);
 
 const app = new Elysia()
   .use(cors())
@@ -26,7 +24,6 @@ const app = new Elysia()
         tags: [
           { name: "Health", description: "Health and version" },
           { name: "Chat", description: "Rooms and messages" },
-          { name: "Auth", description: "Authentication" },
         ],
       },
       path: "/docs",
@@ -40,7 +37,6 @@ const app = new Elysia()
     set.status = 500;
     return { code: "INTERNAL_ERROR", message: "An unexpected error occurred" };
   })
-  .all("/api/auth/*", ({ request }) => auth.handler(request))
   .use(healthRoutes)
   .use(chatRoutes(db))
   .listen(config.PORT);

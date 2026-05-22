@@ -4,6 +4,14 @@ export const messageTypeEnum = pgEnum("message_type", ["TEXT", "SYSTEM", "COMMAN
 export const roomStatusEnum = pgEnum("room_status", ["ACTIVE", "ARCHIVED"]);
 export const participantRoleEnum = pgEnum("participant_role", ["OWNER", "MEMBER", "OBSERVER"]);
 
+export const apiKeys = pgTable("api_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const rooms = pgTable("rooms", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().unique(),

@@ -49,12 +49,13 @@ connectWithRetry(
     }
 
     if (msg.type === "message") {
-      log("info", `message from ${msg.from}: ${msg.text}`);
+      const content = msg.dm ? `[DM from ${msg.from}] ${msg.text}` : msg.text;
+      log("info", `message from ${msg.from}: ${msg.text}${msg.dm ? ` (DM to ${msg.to})` : ""}`);
       await mcp.server.notification({
         method: "notifications/claude/channel",
         params: {
-          content: msg.text,
-          meta: { from: msg.from, room: msg.roomId, timestamp: msg.timestamp, ...(msg.dm ? { dm: true, to: msg.to } : {}) },
+          content,
+          meta: { from: msg.from, room: msg.roomId, timestamp: msg.timestamp },
         },
       });
       return;

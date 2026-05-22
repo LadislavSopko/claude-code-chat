@@ -1,6 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { appendFileSync } from "fs";
 import { registerMcpTools } from "./client-tools";
+
+const LOG_FILE = process.env.CLAUDE_CHAT_LOG || "/tmp/claude-chat-mcp.log";
+
+function log(level: string, msg: string): void {
+  const line = `${new Date().toISOString()} [${level}] ${msg}\n`;
+  try { appendFileSync(LOG_FILE, line); } catch { /* ignore */ }
+}
 
 const name = process.env.CLAUDE_CHAT_NAME || "agent-" + Math.random().toString(36).slice(2, 5);
 const apiKey = process.env.CLAUDE_CHAT_API_KEY || "dev-api-key-change-me";
@@ -27,15 +35,21 @@ registerMcpTools(mcp, wsHolder, pendingResponses);
 const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
+log("info", `connecting to ${hubUrl} as ${name}`);
 const wsUrl = `${hubUrl}/ws?apiKey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(name)}`;
 wsHolder.ws = new WebSocket(wsUrl);
 
-wsHolder.ws.onopen = () => {};
+wsHolder.ws.onopen = () => {
+  log("info", "connected to hub");
+};
 
 wsHolder.ws.onmessage = async (event) => {
   const msg = JSON.parse(event.data as string);
 
-  if (msg.type === "registered") return;
+  if (msg.type === "registered") {
+    log("info", `registered as ${msg.name}`);
+    return;
+  }
 
   const pending = pendingResponses.get(msg.type);
   if (pending) {
@@ -45,6 +59,7 @@ wsHolder.ws.onmessage = async (event) => {
   }
 
   if (msg.type === "message") {
+    log("info", `message from ${msg.from}: ${msg.text}`);
     await mcp.server.notification({
       method: "notifications/claude/channel",
       params: {
@@ -56,6 +71,7 @@ wsHolder.ws.onmessage = async (event) => {
   }
 
   if (msg.type === "participant_joined" || msg.type === "participant_left") {
+    log("info", `${msg.name} ${msg.type.replace("participant_", "")}`);
     await mcp.server.notification({
       method: "notifications/claude/channel",
       params: {
@@ -67,16 +83,16 @@ wsHolder.ws.onmessage = async (event) => {
   }
 
   if (msg.type === "error") {
-    console.error("hub error:", msg.message);
+    log("error", `hub error: ${msg.message}`);
   }
 };
 
 wsHolder.ws.onerror = () => {
-  console.error("WebSocket error — is the hub running?");
+  log("error", "WebSocket error — is the hub running?");
   process.exit(1);
 };
 
 wsHolder.ws.onclose = () => {
-  console.error("hub connection closed");
+  log("warn", "hub connection closed");
   process.exit(1);
 };

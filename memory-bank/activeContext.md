@@ -1,17 +1,15 @@
 §MBEL:5.0
 
 [FOCUS]
-@state::IDLE
-@task::none
+@state::TEST
+@feature::01-message-hub-core
+@branch::feature/01-message-hub-core
 
-[COMPLETED:SESSION:2026-05-22]
-✓ j-new-project::fullStack:scaffolding+16:foundations
-✓ j-setup::junior:workflow:configured
-✓ bun:installed:1.3.14
-✓ all:builds:pass{core+api+web+broker}
-✓ committed+pushed::ada8968
-
-[READY:FOR]
-?first:feature::start:with:j-new-feature
-?db:setup::docker:compose:up→db:migrate
-?auth:config::.env{GOOGLE_CLIENT_ID+SECRET+BETTER_AUTH_SECRET}
+[COMPLETED:TDDAB]
+✓ TDDAB-1::API:key:auth+DB:schema{4:tests}
+✓ TDDAB-2::Room:CRUD+REST:API{5:tests}
+✓ TDDAB-3::WebSocket:hub+rooms{5:tests}
+✓ TDDAB-4::Message:persistence+ordering{3:tests}
+✓ TDDAB-5::MCP:client+6:room:tools{7:tests}
+✓ TDDAB-6::HTML:chat:window{4:tests}
+@total::28:tests:passing+0:failing

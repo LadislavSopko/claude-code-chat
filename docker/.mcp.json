@@ -2,7 +2,12 @@
   "mcpServers": {
     "claude-chat": {
       "command": "bun",
-      "args": ["/app/src/client.ts"]
+      "args": ["/app/src/client.ts"],
+      "env": {
+        "CLAUDE_CHAT_API_KEY": "${CLAUDE_CHAT_API_KEY}",
+        "CLAUDE_CHAT_URL": "${CLAUDE_CHAT_URL}",
+        "CLAUDE_CHAT_NAME": "${CLAUDE_CHAT_NAME}"
+      }
     }
   }
 }

@@ -6,6 +6,7 @@ import { createLogger } from "./common/logger";
 import { createDb } from "./db";
 import { healthRoutes } from "./health";
 import { chatRoutes } from "./chat";
+import { wsHub } from "./ws";
 
 const config = loadConfig();
 const logger = createLogger(config);
@@ -39,6 +40,7 @@ const app = new Elysia()
   })
   .use(healthRoutes)
   .use(chatRoutes(db))
+  .use(wsHub(db, logger))
   .listen(config.PORT);
 
 logger.info({ port: config.PORT }, `Claude Code Chat API running`);

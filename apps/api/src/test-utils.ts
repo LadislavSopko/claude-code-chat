@@ -1,16 +1,19 @@
 import { Elysia } from "elysia";
 import { cors } from "@elysiajs/cors";
+import pino from "pino";
 import { createDb } from "./db";
 import { schema } from "./db";
 import { hashApiKey } from "./auth/api-key";
 import { healthRoutes } from "./health";
 import { chatRoutes } from "./chat";
+import { wsHub } from "./ws";
 
 const TEST_API_KEY = "test-key-12345";
 const TEST_DB_URL = process.env.DATABASE_URL!;
 
 export async function createTestApp(options?: { listen?: boolean }) {
   const db = createDb(TEST_DB_URL);
+  const logger = pino({ level: "silent" });
 
   await db.delete(schema.apiKeys);
   const keyHash = await hashApiKey(TEST_API_KEY);
@@ -23,7 +26,8 @@ export async function createTestApp(options?: { listen?: boolean }) {
   const app = new Elysia()
     .use(cors())
     .use(healthRoutes)
-    .use(chatRoutes(db));
+    .use(chatRoutes(db))
+    .use(wsHub(db, logger));
 
   if (options?.listen) {
     const server = app.listen(0);

@@ -3,7 +3,11 @@ import { eq, and } from "drizzle-orm";
 import type { Db } from "../db";
 import { schema } from "../db";
 import { validateApiKey } from "../auth/api-key";
+import type { Auth } from "../auth";
+import type { Config } from "../common/config";
 import type { Logger } from "../common/logger";
+import { AuthType } from "@claude-code-chat/core";
+import { RateLimiter } from "../common/rate-limiter";
 import {
   initRoomState,
   registerClient,
@@ -17,16 +21,14 @@ import {
   getDmVisibleNames,
 } from "./room-state";
 
-const wsNameMap = new WeakMap<object, string>();
-const wsClientType = new WeakMap<object, string>();
-
-// dev-only: clientType is self-declared and trivially falsifiable.
-// Replace with Better Auth (human=OAuth login, agent=API key with bound name) when dashboard is built.
-function resolveParticipantRole(clientType: string, isRoomCreator: boolean): string {
-  if (isRoomCreator && clientType === "human") return "OWNER";
-  if (clientType === "human") return "HUMAN";
-  return "AGENT";
+interface WsAuthContext {
+  readonly name: string;
+  readonly authType: AuthType;
+  readonly userId?: string;
+  readonly apiKeyId?: string;
 }
+
+const wsAuthMap = new WeakMap<object, WsAuthContext>();
 
 async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: string; name: string; created: boolean } | null> {
   if (msg.roomId) {
@@ -43,40 +45,84 @@ async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: 
   return null;
 }
 
-export function wsHub(db: Db, logger: Logger) {
+function resolveRole(authType: AuthType, isRoomCreator: boolean): string {
+  if (authType === AuthType.ApiKey) return "AGENT";
+  return isRoomCreator ? "OWNER" : "HUMAN";
+}
+
+export function wsHub(db: Db, logger: Logger, auth: Auth, config: Config) {
   initRoomState(logger);
+  const allowedOrigins = config.ALLOWED_ORIGINS.split(",").map((s) => s.trim());
+  const connectLimiter = new RateLimiter(60_000, config.WS_CONNECT_RATE_LIMIT_PER_MINUTE);
+  const messageLimiter = new RateLimiter(60_000, config.WS_MESSAGE_RATE_LIMIT_PER_MINUTE);
+
   return new Elysia()
     .ws("/ws", {
       async open(ws) {
-        const url = new URL(ws.data.request.url);
-        const apiKey = url.searchParams.get("apiKey") || "";
-        const name = url.searchParams.get("name") || `agent-${Math.random().toString(36).slice(2, 5)}`;
-
-        const result = await validateApiKey(db, apiKey);
-        if (!result.ok) {
-          ws.send(JSON.stringify({ type: "error", message: "Invalid API key" }));
-          ws.close(4001, "Invalid API key");
+        const ip = ws.data.request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+        if (!connectLimiter.check(ip)) {
+          ws.send(JSON.stringify({ type: "error", message: "Too many connections" }));
+          ws.close(4029, "Rate limited");
           return;
         }
 
-        const clientType = url.searchParams.get("clientType") || "agent";
-        wsNameMap.set(ws, name);
-        wsClientType.set(ws, clientType);
-        registerClient(ws, name, result.data.id);
+        const url = new URL(ws.data.request.url);
+        const apiKey = url.searchParams.get("apiKey") || "";
+        const name = url.searchParams.get("name") || `anon-${Math.random().toString(36).slice(2, 5)}`;
+
+        if (apiKey) {
+          const result = await validateApiKey(db, apiKey);
+          if (!result.ok) {
+            ws.send(JSON.stringify({ type: "error", message: "Invalid API key" }));
+            ws.close(4001, "Invalid API key");
+            return;
+          }
+
+          const authCtx: WsAuthContext = { name, authType: AuthType.ApiKey, apiKeyId: result.data.id };
+          wsAuthMap.set(ws, authCtx);
+          registerClient(ws, name, result.data.id, AuthType.ApiKey);
+          ws.send(JSON.stringify({ type: "registered", name }));
+          logger.info({ name, authType: AuthType.ApiKey }, "ws client connected");
+          return;
+        }
+
+        const origin = ws.data.request.headers.get("origin") || "";
+        if (config.NODE_ENV === "production" && origin && !allowedOrigins.includes(origin)) {
+          ws.send(JSON.stringify({ type: "error", message: "Forbidden origin" }));
+          ws.close(4003, "Forbidden origin");
+          return;
+        }
+
+        const headers = ws.data.request.headers;
+        const session = await auth.api.getSession({ headers });
+        if (!session?.user) {
+          ws.send(JSON.stringify({ type: "error", message: "Authentication required" }));
+          ws.close(4001, "Authentication required");
+          return;
+        }
+
+        const authCtx: WsAuthContext = { name, authType: AuthType.Session, userId: session.user.id };
+        wsAuthMap.set(ws, authCtx);
+        registerClient(ws, name, session.user.id, AuthType.Session);
         ws.send(JSON.stringify({ type: "registered", name }));
-        logger.info({ name, clientType }, "ws client connected");
+        logger.info({ name, authType: AuthType.Session, userId: session.user.id }, "ws client connected");
       },
       async message(ws, raw) {
-        let name = wsNameMap.get(ws);
-        if (!name) {
+        let authCtx = wsAuthMap.get(ws);
+        if (!authCtx) {
           const url = new URL(ws.data.request.url);
-          name = url.searchParams.get("name") || undefined;
+          const name = url.searchParams.get("name") || undefined;
           if (name) {
-            wsNameMap.set(ws, name);
             updateClientWs(name, ws);
           }
+          return;
         }
-        if (!name) return;
+        const name = authCtx.name;
+
+        if (!messageLimiter.check(name)) {
+          ws.send(JSON.stringify({ type: "error", message: "Rate limited" }));
+          return;
+        }
 
         try {
           const msg = typeof raw === "string" ? JSON.parse(raw) : raw as Record<string, unknown>;
@@ -102,12 +148,7 @@ export function wsHub(db: Db, logger: Logger) {
               ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
               return;
             }
-            let clientType = wsClientType.get(ws);
-            if (!clientType) {
-              const u = new URL(ws.data.request.url);
-              clientType = u.searchParams.get("clientType") || "agent";
-            }
-            const role = resolveParticipantRole(clientType, room.created);
+            const role = resolveRole(authCtx.authType, room.created);
             await db.insert(schema.participants).values({ roomId: room.id, name, role: role as "OWNER" | "HUMAN" | "AGENT" });
             addToRoom(name, room.id, role);
             ws.send(JSON.stringify({ type: "room_joined", roomId: room.id, roomName: room.name, role }));
@@ -195,11 +236,11 @@ export function wsHub(db: Db, logger: Logger) {
         }
       },
       close(ws) {
-        const name = wsNameMap.get(ws);
-        if (name) {
-          unregisterClient(name);
-          wsNameMap.delete(ws);
-          logger.info({ name }, "ws client disconnected");
+        const authCtx = wsAuthMap.get(ws);
+        if (authCtx) {
+          unregisterClient(authCtx.name);
+          wsAuthMap.delete(ws);
+          logger.info({ name: authCtx.name }, "ws client disconnected");
         }
       },
     });

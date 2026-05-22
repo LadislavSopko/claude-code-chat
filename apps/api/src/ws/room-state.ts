@@ -8,7 +8,8 @@ export function initRoomState(logger: Logger): void {
 
 interface ClientEntry {
   readonly name: string;
-  readonly apiKeyId: string;
+  readonly authId: string;
+  readonly authType: string;
   ws: unknown;
 }
 
@@ -20,8 +21,8 @@ interface RoomMember {
 const clientsByName = new Map<string, ClientEntry>();
 const roomMembers = new Map<string, Map<string, RoomMember>>();
 
-export function registerClient(ws: unknown, name: string, apiKeyId: string): void {
-  clientsByName.set(name, { name, apiKeyId, ws });
+export function registerClient(ws: unknown, name: string, authId: string, authType: string): void {
+  clientsByName.set(name, { name, authId, authType, ws });
 }
 
 export function updateClientWs(name: string, ws: unknown): void {
@@ -101,4 +102,15 @@ export function getOwnerNames(roomId: string): string[] {
   const members = roomMembers.get(roomId);
   if (!members) return [];
   return [...members.values()].filter(m => m.role === "OWNER").map(m => m.name);
+}
+
+export function closeConnectionsByAuthId(authId: string): void {
+  for (const [name, entry] of clientsByName) {
+    if (entry.authId === authId && entry.ws) {
+      const ws = entry.ws as { send(data: string): void; close(code?: number, reason?: string): void };
+      ws.send(JSON.stringify({ type: "error", message: "API key revoked" }));
+      ws.close(4001, "API key revoked");
+      unregisterClient(name);
+    }
+  }
 }

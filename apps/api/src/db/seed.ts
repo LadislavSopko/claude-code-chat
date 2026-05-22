@@ -9,7 +9,11 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const apiKey = process.env.SEED_API_KEY || "dev-api-key-change-me";
+const apiKey = process.env.SEED_API_KEY;
+if (!apiKey) {
+  console.error("SEED_API_KEY is required");
+  process.exit(1);
+}
 const db = createDb(databaseUrl);
 const keyHash = await hashApiKey(apiKey);
 

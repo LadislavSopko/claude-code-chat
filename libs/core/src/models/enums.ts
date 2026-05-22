@@ -20,3 +20,8 @@ export enum ParticipantRole {
 export enum AuthProvider {
   Google = "GOOGLE",
 }
+
+export enum AuthType {
+  Session = "SESSION",
+  ApiKey = "API_KEY",
+}

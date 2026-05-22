@@ -42,55 +42,44 @@ describe("Participant Roles", () => {
 
   afterAll(async () => { await cleanup(); });
 
-  function connect(name: string, clientType?: string) {
-    const ct = clientType ? '&clientType=' + clientType : '';
-    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}${ct}`);
+  function connect(name: string) {
+    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}`);
     sockets.push(ws);
     return { ws, queue: createMessageQueue(ws) };
   }
 
-  it("should assign OWNER to human room creator", async () => {
-    const c = connect("role-creator", "human");
-    await new Promise(r => { c.ws.onopen = r; });
-    await c.queue.next();
-
-    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
-    const joined = await c.queue.next();
-    expect(joined.role).toBe("OWNER");
-  });
-
-  it("should assign HUMAN to human joining existing room", async () => {
-    const c = connect("role-human", "human");
-    await new Promise(r => { c.ws.onopen = r; });
-    await c.queue.next();
-
-    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
-    const joined = await c.queue.next();
-    expect(joined.role).toBe("HUMAN");
-  });
-
-  it("should assign AGENT to MCP client", async () => {
-    const c = connect("role-agent");
-    await new Promise(r => { c.ws.onopen = r; });
-    await c.queue.next();
-
-    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
-    const joined = await c.queue.next();
-    expect(joined.role).toBe("AGENT");
-  });
-
-  it("should assign AGENT when agent creates room", async () => {
+  it("should assign AGENT to API key connection creating a room", async () => {
     const c = connect("role-agent-creator");
     await new Promise(r => { c.ws.onopen = r; });
     await c.queue.next();
 
-    c.ws.send(JSON.stringify({ type: "join_room", name: "role-agent-created-room" }));
+    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
     const joined = await c.queue.next();
     expect(joined.role).toBe("AGENT");
   });
 
+  it("should assign AGENT to API key connection joining existing room", async () => {
+    const c = connect("role-agent-joiner");
+    await new Promise(r => { c.ws.onopen = r; });
+    await c.queue.next();
+
+    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
+    const joined = await c.queue.next();
+    expect(joined.role).toBe("AGENT");
+  });
+
+  it("should reject connection without API key or session", async () => {
+    const ws = new WebSocket(`${baseUrl}/ws?name=no-auth`);
+    sockets.push(ws);
+    const queue = createMessageQueue(ws);
+    await new Promise(r => { ws.onopen = r; });
+    const msg = await queue.next();
+    expect(msg.type).toBe("error");
+    expect(msg.message).toBe("Authentication required");
+  });
+
   it("should include roles in list_participants response", async () => {
-    const c = connect("role-lister", "human");
+    const c = connect("role-lister");
     await new Promise(r => { c.ws.onopen = r; });
     await c.queue.next();
 
@@ -102,9 +91,8 @@ describe("Participant Roles", () => {
     expect(resp.type).toBe("participants");
     const participants = resp.participants as Array<{ name: string; role: string }>;
     expect(participants.length).toBeGreaterThan(0);
-    const creator = participants.find(p => p.name === "role-creator");
-    expect(creator?.role).toBe("OWNER");
-    const agent = participants.find(p => p.name === "role-agent");
-    expect(agent?.role).toBe("AGENT");
+    for (const p of participants) {
+      expect(p.role).toBe("AGENT");
+    }
   });
 });

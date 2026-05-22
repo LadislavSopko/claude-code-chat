@@ -38,9 +38,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 apps/api/          Elysia REST API (Bun)
 apps/web/          Angular 21 + PrimeNG 21 frontend
 libs/core/         Shared types, interfaces, DTOs, enums (zero deps)
-src/broker.ts      Standalone Bun WebSocket broker (port 4000)
-src/client.ts      MCP channel client (bridges Claude Code ↔ broker)
-docker/            docker-compose (PostgreSQL + broker), Dockerfile configs
+src/client.ts      MCP channel client (bridges Claude Code ↔ API)
+docker/            docker-compose (PostgreSQL), Dockerfile configs
 tools/             OpenAPI client generation script
 ```
 
@@ -51,7 +50,7 @@ tools/             OpenAPI client generation script
 | `bun install` | Install all workspace dependencies |
 | `bun run api:dev` | Start API dev server (port 3000) |
 | `bun run web:dev` | Start Angular dev server (port 4200) |
-| `bun run broker:dev` | Start WebSocket broker (port 4000) |
+
 | `bun run test` | Run all tests |
 | `bun run generate:api-client` | Generate Angular API client from OpenAPI spec |
 | `cd apps/api && bun run db:generate` | Generate Drizzle migrations |

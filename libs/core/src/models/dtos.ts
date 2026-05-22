@@ -1,4 +1,4 @@
-import type { MessageType, RoomStatus, ParticipantRole } from "./enums";
+import type { MessageType, RoomStatus, ParticipantRole, AuthType } from "./enums";
 
 export interface MessageDto {
   readonly id: string;
@@ -30,4 +30,12 @@ export interface HealthDto {
   readonly status: "ok";
   readonly version: string;
   readonly uptime: number;
+}
+
+export interface AuthContextDto {
+  readonly authType: AuthType;
+  readonly userId?: string;
+  readonly email?: string;
+  readonly apiKeyId?: string;
+  readonly role: ParticipantRole;
 }

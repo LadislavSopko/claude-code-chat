@@ -43,37 +43,36 @@ describe("Direct Messages", () => {
 
   afterAll(async () => { await cleanup(); });
 
-  function connect(name: string, clientType?: string) {
-    const ct = clientType ? '&clientType=' + clientType : '';
-    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}${ct}`);
+  function connect(name: string) {
+    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}`);
     sockets.push(ws);
     return { ws, queue: createMessageQueue(ws) };
   }
 
-  it("should deliver DM only to recipient + owner/human", async () => {
-    const owner = connect("dm-owner", "human");
+  it("should deliver DM only to recipient (agents cannot see other DMs)", async () => {
     const alice = connect("dm-alice");
     const bob = connect("dm-bob");
+    const charlie = connect("dm-charlie");
     await Promise.all([
-      new Promise(r => { owner.ws.onopen = r; }),
       new Promise(r => { alice.ws.onopen = r; }),
       new Promise(r => { bob.ws.onopen = r; }),
+      new Promise(r => { charlie.ws.onopen = r; }),
     ]);
-    await owner.queue.next(); // registered
     await alice.queue.next();
     await bob.queue.next();
-
-    owner.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await owner.queue.next(); // room_joined OWNER
+    await charlie.queue.next();
 
     alice.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await alice.queue.next(); // room_joined MEMBER
-    await owner.queue.next(); // participant_joined
+    await alice.queue.next();
 
     bob.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await bob.queue.next(); // room_joined MEMBER
-    await owner.queue.next(); // participant_joined
+    await bob.queue.next();
     await alice.queue.next(); // participant_joined
+
+    charlie.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
+    await charlie.queue.next();
+    await alice.queue.next(); // participant_joined
+    await bob.queue.next(); // participant_joined
 
     // Alice sends DM to bob
     alice.ws.send(JSON.stringify({ type: "message", name: "dm-test-room", text: "secret for bob", to: "dm-bob" }));
@@ -85,14 +84,9 @@ describe("Direct Messages", () => {
     expect(bobMsg.from).toBe("dm-alice");
     expect(bobMsg.dm).toBe(true);
 
-    // Owner should receive it (sees all)
-    const ownerMsg = await owner.queue.next();
-    expect(ownerMsg.text).toBe("secret for bob");
-    expect(ownerMsg.dm).toBe(true);
-
-    // Alice should NOT receive it (she's the sender, excluded)
+    // Charlie should NOT receive it (agents can't see other DMs)
     const noMsg = await Promise.race([
-      alice.queue.next(),
+      charlie.queue.next(),
       new Promise(r => setTimeout(() => r("timeout"), 300)),
     ]);
     expect(noMsg).toBe("timeout");

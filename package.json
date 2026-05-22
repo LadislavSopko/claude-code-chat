@@ -12,7 +12,7 @@
     "api:build": "bun run --filter @claude-code-chat/api build",
     "web:dev": "bun run --filter @claude-code-chat/web dev",
     "web:build": "bun run --filter @claude-code-chat/web build",
-    "broker:dev": "bun run src/broker.ts",
+
     "generate:api-client": "bash tools/generate-api-client.sh",
     "test": "bun run --filter '*' test",
     "lint": "bun run --filter '*' lint",

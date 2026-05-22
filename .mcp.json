@@ -10,13 +10,20 @@
     "angular-cli": {
       "command": "npx",
       "args": ["-y", "@angular/cli", "mcp"]
-    },
+      },
     "chrome-devtools": {
       "command": "npx",
       "args": [
         "-y",
-        "chrome-devtools-mcp@latest"
-      ]
+        "chrome-devtools-mcp@latest",
+        "--executable-path=/opt/chrome/linux-143.0.7499.169/chrome-linux64/chrome",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--user-data-dir=/home/laco/claude-code-chat/.chrome-profile"
+      ],
+      "env": {
+        "DISPLAY": ":0"
+      }
     },
     "claude-chat": {
       "command": "/home/laco/.bun/bin/bun",

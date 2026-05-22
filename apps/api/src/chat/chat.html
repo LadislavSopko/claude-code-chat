@@ -83,6 +83,8 @@
   <div class="header">
     <h1>Claude Code Chat</h1>
     <span class="room-name-tag" id="room-tag"></span>
+    <button id="google-login-btn" onclick="fetch('/api/auth/sign-in/social',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'google',callbackURL:window.location.href}),credentials:'include'}).then(r=>r.json()).then(d=>{if(d.url)window.location.href=d.url}).catch(e=>alert('Login failed: '+e))" style="background:#4285f4;color:#fff;border:none;padding:7px 16px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">Login with Google</button>
+    <span id="user-info" style="font-size:13px;color:#34d399;display:none;"></span>
     <span class="status" id="status">Disconnected</span>
   </div>
   <div class="connect-form" id="connect-form">
@@ -324,7 +326,7 @@
       saveSession();
 
       var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var url = protocol + '//' + location.host + '/ws?apiKey=' + encodeURIComponent(apiKey) + '&name=' + encodeURIComponent(myName) + '&clientType=human';
+      var url = protocol + '//' + location.host + '/ws?apiKey=' + encodeURIComponent(apiKey) + '&name=' + encodeURIComponent(myName);
       ws = new WebSocket(url);
 
       ws.onopen = function() {
@@ -418,6 +420,17 @@
       sendMessage('STOP');
       addMessage('STOP command sent', '', 'system');
     };
+
+    fetch('/api/auth/get-session', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.user) {
+          document.getElementById('google-login-btn').style.display = 'none';
+          document.getElementById('user-info').style.display = 'inline';
+          document.getElementById('user-info').textContent = data.user.name || data.user.email;
+          document.getElementById('name-input').value = data.user.name || data.user.email.split('@')[0];
+        }
+      }).catch(function() {});
 
     loadRooms();
     var session = loadSession();

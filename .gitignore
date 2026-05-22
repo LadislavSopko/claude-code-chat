@@ -17,4 +17,5 @@ coverage/
 
 APPROACH.md
 .sudo
-.keys
+.keys.json
+.chrome-profile

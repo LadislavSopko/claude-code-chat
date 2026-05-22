@@ -25,6 +25,10 @@ export function registerClient(ws: unknown, name: string, authId: string, authTy
   clientsByName.set(name, { name, authId, authType, ws });
 }
 
+export function getClientEntry(name: string): ClientEntry | undefined {
+  return clientsByName.get(name);
+}
+
 export function updateClientWs(name: string, ws: unknown): void {
   const entry = clientsByName.get(name);
   if (entry) entry.ws = ws;

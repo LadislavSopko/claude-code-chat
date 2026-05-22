@@ -15,6 +15,20 @@
       "when": 1779458567308,
       "tag": "0001_young_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1779475099900,
+      "tag": "0002_abnormal_scarlet_spider",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1779483851876,
+      "tag": "0003_yellow_spiral",
+      "breakpoints": true
     }
   ]
 }

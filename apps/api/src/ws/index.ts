@@ -11,6 +11,7 @@ import { RateLimiter } from "../common/rate-limiter";
 import {
   initRoomState,
   registerClient,
+  getClientEntry,
   updateClientWs,
   unregisterClient,
   addToRoom,
@@ -114,8 +115,13 @@ export function wsHub(db: Db, logger: Logger, auth: Auth, config: Config) {
           const name = url.searchParams.get("name") || undefined;
           if (name) {
             updateClientWs(name, ws);
+            const entry = getClientEntry(name);
+            if (entry) {
+              authCtx = { name, authType: entry.authType as AuthType, apiKeyId: entry.authId };
+              wsAuthMap.set(ws, authCtx);
+            }
           }
-          return;
+          if (!authCtx) return;
         }
         const name = authCtx.name;
 

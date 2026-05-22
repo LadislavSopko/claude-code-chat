@@ -4,19 +4,24 @@ import { schema } from "../db";
 import { eq, and } from "drizzle-orm";
 import type { Db } from "../db";
 
-function createMessageQueue(ws: WebSocket) {
-  const buffer: Record<string, unknown>[] = [];
-  let waiting: ((msg: Record<string, unknown>) => void) | null = null;
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data as string);
-    if (waiting) { const r = waiting; waiting = null; r(msg); }
-    else { buffer.push(msg); }
-  };
-  return {
-    next: () => buffer.length > 0
-      ? Promise.resolve(buffer.shift()!)
-      : new Promise<Record<string, unknown>>((r) => { waiting = r; }),
-  };
+function wsConnect(url: string): Promise<{ ws: WebSocket; next: () => Promise<Record<string, unknown>> }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url);
+    const buffer: Record<string, unknown>[] = [];
+    let waiting: ((msg: Record<string, unknown>) => void) | null = null;
+    ws.onmessage = (event) => {
+      const msg = JSON.parse(event.data as string);
+      if (waiting) { const r = waiting; waiting = null; r(msg); }
+      else { buffer.push(msg); }
+    };
+    ws.onopen = () => resolve({
+      ws,
+      next: () => buffer.length > 0
+        ? Promise.resolve(buffer.shift()!)
+        : new Promise<Record<string, unknown>>((r) => { waiting = r; }),
+    });
+    ws.onerror = () => reject(new Error("WS connection failed"));
+  });
 }
 
 describe("Direct Messages", () => {
@@ -43,87 +48,75 @@ describe("Direct Messages", () => {
 
   afterAll(async () => { await cleanup(); });
 
-  function connect(name: string) {
-    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}`);
-    sockets.push(ws);
-    return { ws, queue: createMessageQueue(ws) };
-  }
-
   it("should deliver DM only to recipient (agents cannot see other DMs)", async () => {
-    const alice = connect("dm-alice");
-    const bob = connect("dm-bob");
-    const charlie = connect("dm-charlie");
-    await Promise.all([
-      new Promise(r => { alice.ws.onopen = r; }),
-      new Promise(r => { bob.ws.onopen = r; }),
-      new Promise(r => { charlie.ws.onopen = r; }),
+    const [alice, bob, charlie] = await Promise.all([
+      wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-alice`),
+      wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-bob`),
+      wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-charlie`),
     ]);
-    await alice.queue.next();
-    await bob.queue.next();
-    await charlie.queue.next();
+    sockets.push(alice.ws, bob.ws, charlie.ws);
+    await alice.next();
+    await bob.next();
+    await charlie.next();
 
     alice.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await alice.queue.next();
+    await alice.next();
 
     bob.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await bob.queue.next();
-    await alice.queue.next(); // participant_joined
+    await bob.next();
+    await alice.next();
 
     charlie.ws.send(JSON.stringify({ type: "join_room", name: "dm-test-room" }));
-    await charlie.queue.next();
-    await alice.queue.next(); // participant_joined
-    await bob.queue.next(); // participant_joined
+    await charlie.next();
+    await alice.next();
+    await bob.next();
 
-    // Alice sends DM to bob
     alice.ws.send(JSON.stringify({ type: "message", name: "dm-test-room", text: "secret for bob", to: "dm-bob" }));
 
-    // Bob should receive it
-    const bobMsg = await bob.queue.next();
+    const bobMsg = await bob.next();
     expect(bobMsg.type).toBe("message");
     expect(bobMsg.text).toBe("secret for bob");
     expect(bobMsg.from).toBe("dm-alice");
     expect(bobMsg.dm).toBe(true);
 
-    // Charlie should NOT receive it (agents can't see other DMs)
     const noMsg = await Promise.race([
-      charlie.queue.next(),
+      charlie.next(),
       new Promise(r => setTimeout(() => r("timeout"), 300)),
     ]);
     expect(noMsg).toBe("timeout");
   });
 
   it("should error when DM recipient not in room", async () => {
-    const c = connect("dm-error-sender");
-    await new Promise(r => { c.ws.onopen = r; });
-    await c.queue.next();
+    const c = await wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-error-sender`);
+    sockets.push(c.ws);
+    await c.next();
 
     c.ws.send(JSON.stringify({ type: "join_room", name: "dm-error-room" }));
-    await c.queue.next();
+    await c.next();
 
     c.ws.send(JSON.stringify({ type: "message", name: "dm-error-room", text: "hello", to: "nobody" }));
-    const resp = await c.queue.next();
+    const resp = await c.next();
     expect(resp.type).toBe("error");
   });
 
   it("should persist DM with to_name in DB", async () => {
-    const c1 = connect("dm-persist-sender");
-    const c2 = connect("dm-persist-receiver");
-    await Promise.all([
-      new Promise(r => { c1.ws.onopen = r; }),
-      new Promise(r => { c2.ws.onopen = r; }),
+    const [c1, c2] = await Promise.all([
+      wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-persist-sender`),
+      wsConnect(`${baseUrl}/ws?apiKey=${API_KEY}&name=dm-persist-receiver`),
     ]);
-    await c1.queue.next();
-    await c2.queue.next();
+    sockets.push(c1.ws, c2.ws);
+    await c1.next();
+    await c2.next();
 
     c1.ws.send(JSON.stringify({ type: "join_room", name: "dm-persist-room" }));
-    const j1 = await c1.queue.next();
+    const j1 = await c1.next();
     const roomId = j1.roomId as string;
 
     c2.ws.send(JSON.stringify({ type: "join_room", name: "dm-persist-room" }));
-    await c2.queue.next();
+    await c2.next();
 
     c1.ws.send(JSON.stringify({ type: "message", name: "dm-persist-room", text: "private msg", to: "dm-persist-receiver" }));
-    await c2.queue.next(); // receive DM
+    await c2.next();
 
     const [msg] = await db.select().from(schema.messages)
       .where(and(

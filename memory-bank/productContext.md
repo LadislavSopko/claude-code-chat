@@ -3,7 +3,7 @@
 [VISION]
 @project::claude-code-chat
 @purpose::ChatHub{distributed:ClaudeCode+sessions+realtime}
-@description::CentralHub→multiple:CladudeCodeInstances+chat+collaborate
+@description::CentralHub→multiple:ClaudeCodeInstances+chat+collaborate+persist
 
 [PROBLEMS]
 @solves::AgentIsolation{CC:sessions→independent+¬communicate}
@@ -12,13 +12,13 @@
 @solves::NoRooms{single:namespace+¬topics}
 
 [GOALS]
-?fullStack::Angular21+PrimeNG21(FE)+NestJS+Fastify(BE)
-?auth::GoogleOAuth2+JWT{tokenGeneration+validation}
-?db::PostgreSQL+DrizzleORM{persistence}
-?contract::OpenAPI{NestJS→swagger→openapi-generator→Angular:client}
-?logging::nestjs-pino{structured+JSON+file+console}
-?monorepo::Nx+pnpm{workspace}
-?testing::Vitest(unit)+Playwright(E2E)
+@fullStack::Angular21+PrimeNG21(FE)+Elysia+Bun(BE)
+@auth::GoogleOAuth2+JWT{BetterAuth+DrizzleAdapter}
+@db::PostgreSQL+DrizzleORM{persistence+migrations}
+@contract::OpenAPI{@elysiajs/swagger→openapi-generator→Angular:client}
+@logging::pino{structured+JSON}
+@monorepo::Bun:workspaces{apps+libs}
+@testing::Vitest(unit)+Playwright(E2E)
 
 [SUCCESS]
 ?agents→chat+collaborate+persist:history

@@ -1,29 +1,17 @@
 §MBEL:5.0
 
 [FOCUS]
-@state::PLAN
-@task::j-new-project{scaffolding+allFoundations}
+@state::IDLE
+@task::none
 
-[PLAN:APPROVED]
-?scaffold::Nx+pnpm:monorepo
-?structure::apps/{api+web}+libs/{core}+src/{broker+client:existing}
-?foundations::#16{all:applied}
-?architecture::IEntity+genericRepo+genericController+UoW+enums+factories
+[COMPLETED:SESSION:2026-05-22]
+✓ j-new-project::fullStack:scaffolding+16:foundations
+✓ j-setup::junior:workflow:configured
+✓ bun:installed:1.3.14
+✓ all:builds:pass{core+api+web+broker}
+✓ committed+pushed::ada8968
 
-[STRUCTURE]
-apps/api/→NestJS+Fastify{config+auth+chat+health+common}
-apps/web/→Angular21+PrimeNG21{features+shared+core+generated}
-libs/core/→SharedTypes{interfaces+models+errors}
-src/→ExistingBun{broker.ts+client.ts:unchanged}
-tools/→OpenAPI:clientGeneration
-docker/→docker-compose{PostgreSQL+services}
-
-[NEXT:STEPS]
-?1::UserRestart{MCP:tools:added→Angular+xmp4}
-?2::AfterRestart→verify:libs:versions+scaffold
-?3::Create:Nx:workspace+apps+libs
-?4::Apply:all:16:foundations
-?5::Verify:build+test+config+logging
-
-[BLOCKERS]
-!restart::User:needs→restart:session{MCP:tools:Angular+xmp4}
+[READY:FOR]
+?first:feature::start:with:j-new-feature
+?db:setup::docker:compose:up→db:migrate
+?auth:config::.env{GOOGLE_CLIENT_ID+SECRET+BETTER_AUTH_SECRET}

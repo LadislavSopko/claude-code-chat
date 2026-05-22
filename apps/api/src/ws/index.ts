@@ -5,6 +5,7 @@ import { schema } from "../db";
 import { validateApiKey } from "../auth/api-key";
 import type { Logger } from "../common/logger";
 import {
+  initRoomState,
   registerClient,
   updateClientWs,
   unregisterClient,
@@ -34,6 +35,7 @@ async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: 
 }
 
 export function wsHub(db: Db, logger: Logger) {
+  initRoomState(logger);
   return new Elysia()
     .ws("/ws", {
       async open(ws) {
@@ -89,7 +91,7 @@ export function wsHub(db: Db, logger: Logger) {
               ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
               return;
             }
-            const role = room.created ? "OWNER" : "MEMBER";
+            const role = (msg.role === "OWNER" || room.created) ? "OWNER" : "MEMBER";
             await db.insert(schema.participants).values({ roomId: room.id, name, role });
             addToRoom(name, room.id, role);
             ws.send(JSON.stringify({ type: "room_joined", roomId: room.id, roomName: room.name, role }));

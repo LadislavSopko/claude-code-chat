@@ -1,3 +1,11 @@
+import type { Logger } from "../common/logger";
+
+let log: Logger | null = null;
+
+export function initRoomState(logger: Logger): void {
+  log = logger;
+}
+
 interface ClientEntry {
   readonly name: string;
   readonly apiKeyId: string;
@@ -53,10 +61,16 @@ export function broadcastToRoom(
   if (!members) return;
   for (const [memberName] of members) {
     if (memberName === excludeName) continue;
-    if (filter && !filter(memberName)) continue;
+    if (filter && !filter(memberName)) {
+      log?.debug({ memberName, roomId, hasFilter: true }, "broadcast filtered out");
+      continue;
+    }
     const entry = clientsByName.get(memberName);
     if (entry?.ws) {
+      log?.debug({ memberName, roomId }, "broadcast sending to");
       (entry.ws as { send(data: string): void }).send(data);
+    } else {
+      log?.warn({ memberName, roomId, hasEntry: !!entry, hasWs: !!entry?.ws }, "broadcast skip — no ws");
     }
   }
 }

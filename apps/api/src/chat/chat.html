@@ -62,11 +62,11 @@
     .msg.self .sender { color: #60a5fa; }
     .msg.other { background: #1e293b; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #334155; }
     .msg.other .sender { color: #a78bfa; }
-    .msg.dm { border-left: 3px solid #a855f7; }
+    .msg.dm { border-left: 3px solid #a855f7; background: #1a0a2e !important; }
     .msg.system { background: transparent; align-self: center; font-size: 12px; color: #64748b; padding: 4px 12px; border: 1px solid #334155; border-radius: 20px; }
 
-    .msg.other[data-sender="researcher"] .sender { color: #34d399; }
-    .msg.other[data-sender="claude"] .sender { color: #f472b6; }
+    .input-bar.dm-mode { border-top: 2px solid #a855f7; background: #1a0a2e; }
+    .input-bar.dm-mode input { border-color: #a855f7; }
 
     .input-bar { background: #1e293b; padding: 14px 24px; display: flex; gap: 10px; border-top: 1px solid #334155; }
     .input-bar input { flex: 1; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; padding: 12px 16px; border-radius: 10px; font-size: 15px; outline: none; }
@@ -127,13 +127,33 @@
     var participantsPanel = document.getElementById('participants');
     var participantsList = document.getElementById('participants-list');
 
+    var AGENT_COLORS = [
+      { bg: '#1a2744', border: '#3b82f6', text: '#60a5fa' },
+      { bg: '#1a3a2a', border: '#10b981', text: '#34d399' },
+      { bg: '#2a1a3a', border: '#a855f7', text: '#c084fc' },
+      { bg: '#3a1a1a', border: '#ef4444', text: '#f87171' },
+      { bg: '#1a3a3a', border: '#06b6d4', text: '#22d3ee' },
+      { bg: '#3a2a1a', border: '#f59e0b', text: '#fbbf24' },
+      { bg: '#2a1a2a', border: '#ec4899', text: '#f472b6' },
+    ];
+
+    function nameHash(name) {
+      var h = 0;
+      for (var i = 0; i < name.length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+      return Math.abs(h);
+    }
+
+    function getAgentColor(name) {
+      return AGENT_COLORS[nameHash(name) % AGENT_COLORS.length];
+    }
+
     function escapeHtml(str) {
       var d = document.createElement('div');
       d.textContent = str;
       return d.innerHTML;
     }
 
-    function addMessage(text, sender, type, timestamp, dm) {
+    function addMessage(text, sender, type, timestamp, dm, dmTo) {
       var div = document.createElement('div');
       var cls = type === 'system' ? 'system' : (sender === myName ? 'self' : 'other');
       div.className = 'msg ' + cls;
@@ -145,8 +165,12 @@
       } else {
         var meta = document.createElement('div');
         meta.className = 'meta';
-        var dmTag = dm ? '<span class="dm-tag">DM</span>' : '';
-        meta.innerHTML = '<span class="sender">' + escapeHtml(sender) + '</span><span class="time">' + time + '</span>' + dmTag;
+        var color = getAgentColor(sender);
+        var dmTag = dm ? '<span class="dm-tag">' + escapeHtml(sender) + ' → ' + escapeHtml(dmTo || '?') + '</span>' : '';
+        meta.innerHTML = '<span class="sender" style="color:' + color.text + '">' + escapeHtml(sender) + '</span><span class="time">' + time + '</span>' + dmTag;
+        if (sender !== myName) {
+          div.style.borderLeft = '3px solid ' + color.border;
+        }
         var body = document.createElement('div');
         body.className = 'text';
         var html = typeof marked !== 'undefined' ? marked.parse(text) : escapeHtml(text);
@@ -168,12 +192,65 @@
       ws.send(JSON.stringify({ type: 'list_participants', roomId: roomId }));
     }
 
+    var dmTarget = null;
+    var dmPinned = false;
+    var lastParticipantsList = [];
+
+    function clearDmMode(bar) {
+      dmTarget = null;
+      dmPinned = false;
+      msgInput.placeholder = 'Type a message...';
+      if (!bar) bar = document.querySelector('.input-bar');
+      bar.classList.remove('dm-mode');
+      bar.style.borderTopColor = '';
+      bar.style.background = '';
+      renderParticipants(lastParticipantsList);
+    }
+
     function renderParticipants(list) {
+      lastParticipantsList = list;
       participantsList.innerHTML = '';
-      list.forEach(function(p) {
+      var me = list.filter(function(p) { return p.name === myName; });
+      var others = list.filter(function(p) { return p.name !== myName; });
+      me.concat(others).forEach(function(p) {
         var div = document.createElement('div');
         div.className = 'participant';
-        div.innerHTML = '<span class="dot"></span>' + escapeHtml(p.name) + '<span class="role">' + p.role + '</span>';
+        var pc = getAgentColor(p.name);
+        div.style.borderLeft = '3px solid ' + pc.border;
+        if (p.name === dmTarget) div.style.background = pc.bg;
+        var pin = (p.name === dmTarget && dmPinned) ? ' &#128204;' : '';
+        div.innerHTML = '<span class="dot" style="background:' + pc.text + '"></span><span style="color:' + pc.text + '">' + escapeHtml(p.name) + pin + '</span><span class="role">' + p.role + '</span>';
+        if (p.name !== myName) {
+          div.style.cursor = 'pointer';
+          div.onclick = function() {
+            var bar = document.querySelector('.input-bar');
+            if (dmTarget === p.name && !dmPinned) {
+              clearDmMode(bar);
+            } else {
+              dmTarget = p.name;
+              dmPinned = false;
+              var tc = getAgentColor(p.name);
+              msgInput.placeholder = 'DM → ' + p.name + ' (1 msg)';
+              bar.classList.add('dm-mode');
+              bar.style.borderTopColor = tc.border;
+              bar.style.background = tc.bg;
+            }
+            renderParticipants(list);
+            msgInput.focus();
+          };
+          div.ondblclick = function() {
+            var bar = document.querySelector('.input-bar');
+            dmTarget = p.name;
+            dmPinned = true;
+            var tc = getAgentColor(p.name);
+            msgInput.placeholder = 'DM → ' + p.name + ' (pinned)';
+            bar.classList.add('dm-mode');
+            bar.style.borderTopColor = tc.border;
+            bar.style.background = tc.bg;
+            renderParticipants(list);
+            msgInput.focus();
+          };
+        }
         participantsList.appendChild(div);
       });
     }
@@ -255,7 +332,7 @@
       ws.onmessage = function(event) {
         var msg = JSON.parse(event.data);
         if (msg.type === 'registered') {
-          ws.send(JSON.stringify({ type: 'join_room', roomId: roomId }));
+          ws.send(JSON.stringify({ type: 'join_room', roomId: roomId, role: 'OWNER' }));
           return;
         }
         if (msg.type === 'room_joined') {
@@ -264,7 +341,7 @@
             headers: { 'Authorization': 'Bearer ' + apiKey }
           }).then(function(r) { return r.json(); }).then(function(msgs) {
             if (msgs && msgs.length) {
-              msgs.forEach(function(m) { addMessage(m.text, m.fromName, 'message', m.createdAt, !!m.toName); });
+              msgs.forEach(function(m) { addMessage(m.text, m.fromName, 'message', m.createdAt, !!m.toName, m.toName); });
             }
           });
           refreshParticipants();
@@ -276,7 +353,7 @@
           return;
         }
         if (msg.type === 'message') {
-          addMessage(msg.text, msg.from, 'message', msg.timestamp, !!msg.dm);
+          addMessage(msg.text, msg.from, 'message', msg.timestamp, !!msg.dm, msg.to);
           return;
         }
         if (msg.type === 'participant_joined') {
@@ -310,8 +387,13 @@
 
     function sendMessage(text) {
       if (!ws || !roomId || !text) return;
-      ws.send(JSON.stringify({ type: 'message', roomId: roomId, text: text }));
-      addMessage(text, myName, 'message');
+      var msg = { type: 'message', roomId: roomId, text: text };
+      if (dmTarget) msg.to = dmTarget;
+      ws.send(JSON.stringify(msg));
+      addMessage(text, myName, 'message', null, !!dmTarget, dmTarget);
+      if (dmTarget && !dmPinned) {
+        clearDmMode();
+      }
     }
 
     sendBtn.onclick = function() {

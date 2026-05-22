@@ -43,14 +43,15 @@ describe("Direct Messages", () => {
 
   afterAll(async () => { await cleanup(); });
 
-  function connect(name: string) {
-    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}`);
+  function connect(name: string, clientType?: string) {
+    const ct = clientType ? '&clientType=' + clientType : '';
+    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}${ct}`);
     sockets.push(ws);
     return { ws, queue: createMessageQueue(ws) };
   }
 
-  it("should deliver DM only to recipient + owner", async () => {
-    const owner = connect("dm-owner");
+  it("should deliver DM only to recipient + owner/human", async () => {
+    const owner = connect("dm-owner", "human");
     const alice = connect("dm-alice");
     const bob = connect("dm-bob");
     await Promise.all([

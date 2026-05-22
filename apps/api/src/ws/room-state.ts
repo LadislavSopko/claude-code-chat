@@ -87,6 +87,16 @@ export function getRoomMemberRoles(roomId: string): Array<{ name: string; role: 
   return [...members.values()].map(m => ({ name: m.name, role: m.role }));
 }
 
+export function canSeeAllDMs(role: string): boolean {
+  return role === "OWNER" || role === "HUMAN";
+}
+
+export function getDmVisibleNames(roomId: string): string[] {
+  const members = roomMembers.get(roomId);
+  if (!members) return [];
+  return [...members.values()].filter(m => canSeeAllDMs(m.role)).map(m => m.name);
+}
+
 export function getOwnerNames(roomId: string): string[] {
   const members = roomMembers.get(roomId);
   if (!members) return [];

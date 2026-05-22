@@ -11,6 +11,8 @@ export enum RoomStatus {
 
 export enum ParticipantRole {
   Owner = "OWNER",
+  Human = "HUMAN",
+  Agent = "AGENT",
   Member = "MEMBER",
   Observer = "OBSERVER",
 }

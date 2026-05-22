@@ -34,7 +34,7 @@ registerMcpTools(mcp, wsHolder, pendingResponses, joinedRooms);
 const transport = new StdioServerTransport();
 await mcp.connect(transport);
 
-const wsUrl = `${hubUrl}/ws?apiKey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(name)}`;
+const wsUrl = `${hubUrl}/ws?apiKey=${encodeURIComponent(apiKey)}&name=${encodeURIComponent(name)}&clientType=agent`;
 
 connectWithRetry(
   wsUrl,

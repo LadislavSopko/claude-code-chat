@@ -58,7 +58,7 @@ describe("Room CRUD API", () => {
     );
     expect(res.status).toBe(200);
     expect(res.data.name).toBe("alice");
-    expect(res.data.role).toBe("MEMBER");
+    expect(res.data.role).toBe("AGENT");
   });
 
   it("POST /api/chat/rooms/:id/leave should remove participant", async () => {

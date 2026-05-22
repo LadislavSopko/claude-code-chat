@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, pgEnum, uuid } from "drizzle-orm/pg-core";
 
 export const messageTypeEnum = pgEnum("message_type", ["TEXT", "SYSTEM", "COMMAND"]);
 export const roomStatusEnum = pgEnum("room_status", ["ACTIVE", "ARCHIVED"]);
-export const participantRoleEnum = pgEnum("participant_role", ["OWNER", "MEMBER", "OBSERVER"]);
+export const participantRoleEnum = pgEnum("participant_role", ["OWNER", "MEMBER", "OBSERVER", "HUMAN", "AGENT"]);
 
 export const apiKeys = pgTable("api_keys", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -34,6 +34,6 @@ export const participants = pgTable("participants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   roomId: uuid("room_id").notNull().references(() => rooms.id),
-  role: participantRoleEnum("role").notNull().default("MEMBER"),
+  role: participantRoleEnum("role").notNull().default("AGENT"),
   connectedAt: timestamp("connected_at", { withTimezone: true }).notNull().defaultNow(),
 });

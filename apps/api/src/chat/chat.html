@@ -49,7 +49,9 @@
     #participants h3 { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
     .participant { padding: 4px 8px; border-radius: 4px; font-size: 13px; margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
     .participant .dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; }
-    .participant .role { font-size: 10px; color: #64748b; margin-left: auto; }
+    .participant .pin-icon { font-size: 12px; margin-left: auto; cursor: pointer; opacity: 0.3; }
+    .participant .pin-icon:hover { opacity: 0.7; }
+    .participant .pin-icon.pinned { opacity: 1; }
 
     .msg { padding: 6px 10px; border-radius: 10px; max-width: 75%; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
     .msg .meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
@@ -218,8 +220,9 @@
         var pc = getAgentColor(p.name);
         div.style.borderLeft = '3px solid ' + pc.border;
         if (p.name === dmTarget) div.style.background = pc.bg;
-        var pin = (p.name === dmTarget && dmPinned) ? ' &#128204;' : '';
-        div.innerHTML = '<span class="dot" style="background:' + pc.text + '"></span><span style="color:' + pc.text + '">' + escapeHtml(p.name) + pin + '</span><span class="role">' + p.role + '</span>';
+        var pinCls = (p.name === dmTarget && dmPinned) ? ' pinned' : '';
+        var pinIcon = p.name !== myName ? '<span class="pin-icon' + pinCls + '" title="Pin DM">&#128204;</span>' : '';
+        div.innerHTML = '<span class="dot" style="background:' + pc.text + '"></span><span style="color:' + pc.text + '">' + escapeHtml(p.name) + '</span>' + pinIcon;
         if (p.name !== myName) {
           div.style.cursor = 'pointer';
           div.onclick = function() {
@@ -238,15 +241,23 @@
             renderParticipants(list);
             msgInput.focus();
           };
-          div.ondblclick = function() {
+        }
+        var pinEl = div.querySelector('.pin-icon');
+        if (pinEl) {
+          pinEl.onclick = function(e) {
+            e.stopPropagation();
             var bar = document.querySelector('.input-bar');
-            dmTarget = p.name;
-            dmPinned = true;
-            var tc = getAgentColor(p.name);
-            msgInput.placeholder = 'DM → ' + p.name + ' (pinned)';
-            bar.classList.add('dm-mode');
-            bar.style.borderTopColor = tc.border;
-            bar.style.background = tc.bg;
+            if (dmTarget === p.name && dmPinned) {
+              clearDmMode(bar);
+            } else {
+              dmTarget = p.name;
+              dmPinned = true;
+              var tc = getAgentColor(p.name);
+              msgInput.placeholder = 'DM → ' + p.name + ' (pinned)';
+              bar.classList.add('dm-mode');
+              bar.style.borderTopColor = tc.border;
+              bar.style.background = tc.bg;
+            }
             renderParticipants(list);
             msgInput.focus();
           };
@@ -313,7 +324,7 @@
       saveSession();
 
       var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var url = protocol + '//' + location.host + '/ws?apiKey=' + encodeURIComponent(apiKey) + '&name=' + encodeURIComponent(myName);
+      var url = protocol + '//' + location.host + '/ws?apiKey=' + encodeURIComponent(apiKey) + '&name=' + encodeURIComponent(myName) + '&clientType=human';
       ws = new WebSocket(url);
 
       ws.onopen = function() {
@@ -332,7 +343,7 @@
       ws.onmessage = function(event) {
         var msg = JSON.parse(event.data);
         if (msg.type === 'registered') {
-          ws.send(JSON.stringify({ type: 'join_room', roomId: roomId, role: 'OWNER' }));
+          ws.send(JSON.stringify({ type: 'join_room', roomId: roomId }));
           return;
         }
         if (msg.type === 'room_joined') {

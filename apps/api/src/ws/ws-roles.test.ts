@@ -42,14 +42,15 @@ describe("Participant Roles", () => {
 
   afterAll(async () => { await cleanup(); });
 
-  function connect(name: string) {
-    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}`);
+  function connect(name: string, clientType?: string) {
+    const ct = clientType ? '&clientType=' + clientType : '';
+    const ws = new WebSocket(`${baseUrl}/ws?apiKey=${API_KEY}&name=${name}${ct}`);
     sockets.push(ws);
     return { ws, queue: createMessageQueue(ws) };
   }
 
-  it("should assign OWNER role to room creator", async () => {
-    const c = connect("role-creator");
+  it("should assign OWNER to human room creator", async () => {
+    const c = connect("role-creator", "human");
     await new Promise(r => { c.ws.onopen = r; });
     await c.queue.next();
 
@@ -58,18 +59,38 @@ describe("Participant Roles", () => {
     expect(joined.role).toBe("OWNER");
   });
 
-  it("should assign MEMBER role to subsequent joiners", async () => {
-    const c = connect("role-joiner");
+  it("should assign HUMAN to human joining existing room", async () => {
+    const c = connect("role-human", "human");
     await new Promise(r => { c.ws.onopen = r; });
     await c.queue.next();
 
     c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
     const joined = await c.queue.next();
-    expect(joined.role).toBe("MEMBER");
+    expect(joined.role).toBe("HUMAN");
+  });
+
+  it("should assign AGENT to MCP client", async () => {
+    const c = connect("role-agent");
+    await new Promise(r => { c.ws.onopen = r; });
+    await c.queue.next();
+
+    c.ws.send(JSON.stringify({ type: "join_room", name: "role-test-room" }));
+    const joined = await c.queue.next();
+    expect(joined.role).toBe("AGENT");
+  });
+
+  it("should assign AGENT when agent creates room", async () => {
+    const c = connect("role-agent-creator");
+    await new Promise(r => { c.ws.onopen = r; });
+    await c.queue.next();
+
+    c.ws.send(JSON.stringify({ type: "join_room", name: "role-agent-created-room" }));
+    const joined = await c.queue.next();
+    expect(joined.role).toBe("AGENT");
   });
 
   it("should include roles in list_participants response", async () => {
-    const c = connect("role-lister");
+    const c = connect("role-lister", "human");
     await new Promise(r => { c.ws.onopen = r; });
     await c.queue.next();
 
@@ -83,7 +104,7 @@ describe("Participant Roles", () => {
     expect(participants.length).toBeGreaterThan(0);
     const creator = participants.find(p => p.name === "role-creator");
     expect(creator?.role).toBe("OWNER");
-    const joiner = participants.find(p => p.name === "role-lister");
-    expect(joiner?.role).toBe("MEMBER");
+    const agent = participants.find(p => p.name === "role-agent");
+    expect(agent?.role).toBe("AGENT");
   });
 });

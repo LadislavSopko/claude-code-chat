@@ -14,10 +14,19 @@ import {
   broadcastToRoom,
   getRoomMemberNames,
   getRoomMemberRoles,
-  getOwnerNames,
+  getDmVisibleNames,
 } from "./room-state";
 
 const wsNameMap = new WeakMap<object, string>();
+const wsClientType = new WeakMap<object, string>();
+
+// dev-only: clientType is self-declared and trivially falsifiable.
+// Replace with Better Auth (human=OAuth login, agent=API key with bound name) when dashboard is built.
+function resolveParticipantRole(clientType: string, isRoomCreator: boolean): string {
+  if (isRoomCreator && clientType === "human") return "OWNER";
+  if (clientType === "human") return "HUMAN";
+  return "AGENT";
+}
 
 async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: string; name: string; created: boolean } | null> {
   if (msg.roomId) {
@@ -50,10 +59,12 @@ export function wsHub(db: Db, logger: Logger) {
           return;
         }
 
+        const clientType = url.searchParams.get("clientType") || "agent";
         wsNameMap.set(ws, name);
+        wsClientType.set(ws, clientType);
         registerClient(ws, name, result.data.id);
         ws.send(JSON.stringify({ type: "registered", name }));
-        logger.info({ name }, "ws client connected");
+        logger.info({ name, clientType }, "ws client connected");
       },
       async message(ws, raw) {
         let name = wsNameMap.get(ws);
@@ -91,8 +102,13 @@ export function wsHub(db: Db, logger: Logger) {
               ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
               return;
             }
-            const role = (msg.role === "OWNER" || room.created) ? "OWNER" : "MEMBER";
-            await db.insert(schema.participants).values({ roomId: room.id, name, role });
+            let clientType = wsClientType.get(ws);
+            if (!clientType) {
+              const u = new URL(ws.data.request.url);
+              clientType = u.searchParams.get("clientType") || "agent";
+            }
+            const role = resolveParticipantRole(clientType, room.created);
+            await db.insert(schema.participants).values({ roomId: room.id, name, role: role as "OWNER" | "HUMAN" | "AGENT" });
             addToRoom(name, room.id, role);
             ws.send(JSON.stringify({ type: "room_joined", roomId: room.id, roomName: room.name, role }));
             broadcastToRoom(room.id, { type: "participant_joined", name, roomId: room.id }, name);
@@ -144,9 +160,9 @@ export function wsHub(db: Db, logger: Logger) {
                 ws.send(JSON.stringify({ type: "error", message: `${toName} is not in the room` }));
                 return;
               }
-              const owners = getOwnerNames(room.id);
+              const dmVisible = getDmVisibleNames(room.id);
               broadcastToRoom(room.id, payload, name, (memberName) => {
-                return memberName === toName || owners.includes(memberName);
+                return memberName === toName || dmVisible.includes(memberName);
               });
             } else {
               broadcastToRoom(room.id, payload, name);

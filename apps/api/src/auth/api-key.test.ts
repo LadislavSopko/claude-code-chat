@@ -4,7 +4,7 @@ import { schema } from "../db";
 import { validateApiKey, hashApiKey } from "./api-key";
 import { ErrorCode } from "@claude-code-chat/core";
 
-const TEST_DB_URL = process.env.DATABASE_URL!;
+const TEST_DB_URL = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL!.replace(/\/[^/]+$/, "/claude_chat_test");
 
 describe("API Key Auth", () => {
   let db: ReturnType<typeof createDb>;

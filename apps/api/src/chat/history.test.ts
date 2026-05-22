@@ -3,12 +3,14 @@ import { createDb } from "../db";
 import { schema } from "../db";
 import { eq, asc } from "drizzle-orm";
 
+const TEST_DB_URL = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL!.replace(/\/[^/]+$/, "/claude_chat_test");
+
 describe("Message Persistence + Ordering", () => {
   let db: ReturnType<typeof createDb>;
   let roomId: string;
 
   beforeAll(async () => {
-    db = createDb(process.env.DATABASE_URL!);
+    db = createDb(TEST_DB_URL);
 
     const [room] = await db
       .insert(schema.rooms)

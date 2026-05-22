@@ -9,7 +9,7 @@ import { chatRoutes } from "./chat";
 import { wsHub } from "./ws";
 
 const TEST_API_KEY = "test-key-12345";
-const TEST_DB_URL = process.env.DATABASE_URL!;
+const TEST_DB_URL = process.env.DATABASE_URL_TEST || process.env.DATABASE_URL!.replace(/\/[^/]+$/, "/claude_chat_test");
 
 export async function createTestApp(options?: { listen?: boolean }) {
   const db = createDb(TEST_DB_URL);

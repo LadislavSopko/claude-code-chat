@@ -12,9 +12,26 @@ import {
   removeFromRoom,
   broadcastToRoom,
   getRoomMemberNames,
+  getRoomMemberRoles,
+  getOwnerNames,
 } from "./room-state";
 
 const wsNameMap = new WeakMap<object, string>();
+
+async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: string; name: string; created: boolean } | null> {
+  if (msg.roomId) {
+    const [room] = await db.select().from(schema.rooms).where(eq(schema.rooms.id, msg.roomId as string));
+    return room ? { id: room.id, name: room.name, created: false } : null;
+  }
+  if (msg.name) {
+    const roomName = msg.name as string;
+    const [existing] = await db.select().from(schema.rooms).where(eq(schema.rooms.name, roomName));
+    if (existing) return { id: existing.id, name: existing.name, created: false };
+    const [created] = await db.insert(schema.rooms).values({ name: roomName }).returning();
+    return { id: created.id, name: created.name, created: true };
+  }
+  return null;
+}
 
 export function wsHub(db: Db, logger: Logger) {
   return new Elysia()
@@ -67,45 +84,71 @@ export function wsHub(db: Db, logger: Logger) {
           }
 
           if (msg.type === "join_room") {
-            await db.insert(schema.participants).values({ roomId: msg.roomId, name });
-            addToRoom(name, msg.roomId);
-            ws.send(JSON.stringify({ type: "room_joined", roomId: msg.roomId }));
-            broadcastToRoom(msg.roomId, { type: "participant_joined", name, roomId: msg.roomId }, name);
+            const room = await resolveRoom(db, msg);
+            if (!room) {
+              ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
+              return;
+            }
+            const role = room.created ? "OWNER" : "MEMBER";
+            await db.insert(schema.participants).values({ roomId: room.id, name, role });
+            addToRoom(name, room.id, role);
+            ws.send(JSON.stringify({ type: "room_joined", roomId: room.id, roomName: room.name, role }));
+            broadcastToRoom(room.id, { type: "participant_joined", name, roomId: room.id }, name);
             return;
           }
 
           if (msg.type === "leave_room") {
+            const room = await resolveRoom(db, msg);
+            if (!room) return;
             await db
               .delete(schema.participants)
               .where(
                 and(
-                  eq(schema.participants.roomId, msg.roomId),
+                  eq(schema.participants.roomId, room.id),
                   eq(schema.participants.name, name)
                 )
               );
-            removeFromRoom(name, msg.roomId);
-            ws.send(JSON.stringify({ type: "room_left", roomId: msg.roomId }));
-            broadcastToRoom(msg.roomId, { type: "participant_left", name, roomId: msg.roomId });
+            removeFromRoom(name, room.id);
+            ws.send(JSON.stringify({ type: "room_left", roomId: room.id }));
+            broadcastToRoom(room.id, { type: "participant_left", name, roomId: room.id });
             return;
           }
 
           if (msg.type === "message") {
+            const room = await resolveRoom(db, msg);
+            if (!room) {
+              ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
+              return;
+            }
+            const toName = (msg.to as string) || null;
             const [stored] = await db
               .insert(schema.messages)
-              .values({ roomId: msg.roomId, fromName: name, text: msg.text, type: "TEXT" })
+              .values({ roomId: room.id, fromName: name, toName, text: msg.text as string, type: "TEXT" })
               .returning();
-            broadcastToRoom(
-              msg.roomId,
-              {
-                type: "message",
-                from: name,
-                text: msg.text,
-                roomId: msg.roomId,
-                timestamp: stored.createdAt.toISOString(),
-                messageId: stored.id,
-              },
-              name
-            );
+
+            const payload = {
+              type: "message",
+              from: name,
+              text: msg.text,
+              roomId: room.id,
+              timestamp: stored.createdAt.toISOString(),
+              messageId: stored.id,
+              ...(toName ? { dm: true, to: toName } : {}),
+            };
+
+            if (toName) {
+              const members = getRoomMemberNames(room.id);
+              if (!members.includes(toName)) {
+                ws.send(JSON.stringify({ type: "error", message: `${toName} is not in the room` }));
+                return;
+              }
+              const owners = getOwnerNames(room.id);
+              broadcastToRoom(room.id, payload, name, (memberName) => {
+                return memberName === toName || owners.includes(memberName);
+              });
+            } else {
+              broadcastToRoom(room.id, payload, name);
+            }
             return;
           }
 
@@ -119,8 +162,13 @@ export function wsHub(db: Db, logger: Logger) {
           }
 
           if (msg.type === "list_participants") {
-            const names = getRoomMemberNames(msg.roomId);
-            ws.send(JSON.stringify({ type: "participants", roomId: msg.roomId, names }));
+            const room = await resolveRoom(db, msg);
+            if (!room) {
+              ws.send(JSON.stringify({ type: "error", message: "Room not found" }));
+              return;
+            }
+            const participants = getRoomMemberRoles(room.id);
+            ws.send(JSON.stringify({ type: "participants", roomId: room.id, participants }));
             return;
           }
         } catch (err) {

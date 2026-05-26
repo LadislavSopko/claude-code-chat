@@ -11,7 +11,7 @@ function log(level: string, msg: string): void {
 
 const name = process.env.CLAUDE_CHAT_NAME || "agent-" + Math.random().toString(36).slice(2, 5);
 const apiKey = process.env.CLAUDE_CHAT_API_KEY || "dev-api-key-change-me";
-const hubUrl = process.env.CLAUDE_CHAT_URL || "ws://localhost:3000";
+const hubUrl = process.env.CLAUDE_CHAT_URL || "ws://localhost:4444";
 
 const mcp = new McpServer(
   { name: "claude-chat", version: "2.0.0" },

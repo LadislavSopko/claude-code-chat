@@ -5,7 +5,8 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "libs/*"
+    "libs/*",
+    "packages/*"
   ],
   "scripts": {
     "api:dev": "bun run --filter @claude-code-chat/api dev",
@@ -13,6 +14,8 @@
     "web:dev": "bun run --filter @claude-code-chat/web dev",
     "web:build": "bun run --filter @claude-code-chat/web build",
     "broker:dev": "bun run src/broker.ts",
+    "mcp:build": "cd packages/cc-chat-mcp && bun run build",
+    "mcp:publish": "cd packages/cc-chat-mcp && bun run build && npm publish --registry=https://nexus.0ics.ai/repository/npm-hosted/",
     "generate:api-client": "bash tools/generate-api-client.sh",
     "test": "bun run --filter '*' test",
     "lint": "bun run --filter '*' lint",

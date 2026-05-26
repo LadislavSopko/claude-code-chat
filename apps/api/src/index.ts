@@ -43,10 +43,11 @@ const app = new Elysia()
     return new Response(html, { headers: { "content-type": "text/html" } });
   })
   .use(healthRoutes)
-  .use(chatRoutes(db))
-  .use(wsHub(db, logger))
+  .use(chatRoutes(db, config.DEV_MODE))
+  .use(wsHub(db, logger, config.DEV_MODE))
   .listen(config.PORT);
 
-logger.info({ port: config.PORT }, `Claude Code Chat API running`);
+logger.info({ port: config.PORT, devMode: config.DEV_MODE }, `Claude Code Chat API running`);
+if (config.DEV_MODE) logger.warn("DEV_MODE is ON — API key auth is disabled");
 
 export type App = typeof app;

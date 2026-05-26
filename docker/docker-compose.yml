@@ -5,8 +5,6 @@ services:
       POSTGRES_USER: claude_chat
       POSTGRES_PASSWORD: claude_chat
       POSTGRES_DB: claude_chat
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -15,16 +13,20 @@ services:
       timeout: 3s
       retries: 5
 
-  broker:
-    image: oven/bun:1-debian
-    working_dir: /app
-    volumes:
-      - ../src/broker.ts:/app/src/broker.ts:ro
-    command: bun run src/broker.ts
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
     ports:
-      - "4000:4000"
+      - "4444:4444"
     environment:
-      PORT: 4000
+      PORT: 4444
+      DEV_MODE: "true"
+      DATABASE_URL: postgres://claude_chat:claude_chat@postgres:5432/claude_chat
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   pgdata:

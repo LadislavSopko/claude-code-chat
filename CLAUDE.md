@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Name**: claude-code-chat
 - **Purpose**: Chat hub for distributed Claude Code sessions with real-time messaging
 - **Stack**: Bun (runtime) + Elysia (API) + Angular 21 + PrimeNG 21 + PostgreSQL + Drizzle ORM + Better Auth
-- **Architecture**: Bun workspace monorepo — `apps/api`, `apps/web`, `libs/core`, `src/` (standalone broker + MCP client)
+- **Architecture**: Bun workspace monorepo — `apps/api`, `apps/web`, `libs/core`, `src/` (MCP client)
 
 ## Critical Rules
 
@@ -35,13 +35,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Structure
 
 ```
-apps/api/          Elysia REST API (Bun)
-apps/web/          Angular 21 + PrimeNG 21 frontend
-libs/core/         Shared types, interfaces, DTOs, enums (zero deps)
-src/broker.ts      Standalone Bun WebSocket broker (port 4000)
-src/client.ts      MCP channel client (bridges Claude Code ↔ broker)
-docker/            docker-compose (PostgreSQL + broker), Dockerfile configs
-tools/             OpenAPI client generation script
+apps/api/              Elysia REST API + WS hub (Bun, port 4444)
+apps/web/              Angular 21 + PrimeNG 21 frontend
+libs/core/             Shared types, interfaces, DTOs, enums (zero deps)
+packages/cc-chat-mcp/  Publishable MCP client (npm → Nexus)
+src/client.ts          MCP channel client source
+src/broker.ts          Legacy standalone broker (superseded by API WS hub)
+docker/                docker-compose (PostgreSQL + API)
+tools/                 OpenAPI client generation script
 ```
 
 ## Commands
@@ -49,14 +50,58 @@ tools/             OpenAPI client generation script
 | Command | Description |
 |---|---|
 | `bun install` | Install all workspace dependencies |
-| `bun run api:dev` | Start API dev server (port 3000) |
+| `bun run api:dev` | Start API dev server (port 4444) |
 | `bun run web:dev` | Start Angular dev server (port 4200) |
-| `bun run broker:dev` | Start WebSocket broker (port 4000) |
 | `bun run test` | Run all tests |
 | `bun run generate:api-client` | Generate Angular API client from OpenAPI spec |
 | `cd apps/api && bun run db:generate` | Generate Drizzle migrations |
 | `cd apps/api && bun run db:migrate` | Apply migrations |
-| `docker compose -f docker/docker-compose.yml up -d` | Start PostgreSQL + broker |
+| `docker compose -f docker/docker-compose.yml up -d` | Start PostgreSQL + API (port 4444) |
+| `bun run mcp:build` | Bundle MCP client into packages/cc-chat-mcp/dist |
+| `bun run mcp:publish` | Build + publish cc-chat-mcp to Nexus |
+
+## MCP Client Setup
+
+### Via Nexus (recommended)
+
+Requires `.npmrc` pointing to Nexus npm-group. Add to `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "claude-chat": {
+      "command": "bunx",
+      "args": ["cc-chat-mcp"],
+      "env": {
+        "CLAUDE_CHAT_URL": "ws://localhost:4444",
+        "CLAUDE_CHAT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+### Via local source (dev)
+
+```json
+{
+  "mcpServers": {
+    "claude-chat": {
+      "command": "bun",
+      "args": ["run", "<path-to-repo>/src/client.ts"],
+      "env": {
+        "CLAUDE_CHAT_URL": "ws://localhost:4444",
+        "CLAUDE_CHAT_NAME": "my-agent"
+      }
+    }
+  }
+}
+```
+
+Environment variables:
+- `CLAUDE_CHAT_URL` — WebSocket URL of the API (default: `ws://localhost:4444`)
+- `CLAUDE_CHAT_NAME` — display name in chat (default: random `agent-xxx`)
+- `CLAUDE_CHAT_API_KEY` — API key (not needed when `DEV_MODE=true`)
 
 ## CODING & INTERACTION NOTES
 

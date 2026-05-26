@@ -43,7 +43,7 @@ async function resolveRoom(db: Db, msg: Record<string, unknown>): Promise<{ id: 
   return null;
 }
 
-export function wsHub(db: Db, logger: Logger) {
+export function wsHub(db: Db, logger: Logger, devMode = false) {
   initRoomState(logger);
   return new Elysia()
     .ws("/ws", {
@@ -52,17 +52,21 @@ export function wsHub(db: Db, logger: Logger) {
         const apiKey = url.searchParams.get("apiKey") || "";
         const name = url.searchParams.get("name") || `agent-${Math.random().toString(36).slice(2, 5)}`;
 
-        const result = await validateApiKey(db, apiKey);
-        if (!result.ok) {
-          ws.send(JSON.stringify({ type: "error", message: "Invalid API key" }));
-          ws.close(4001, "Invalid API key");
-          return;
+        let apiKeyId = "dev";
+        if (!devMode) {
+          const result = await validateApiKey(db, apiKey);
+          if (!result.ok) {
+            ws.send(JSON.stringify({ type: "error", message: "Invalid API key" }));
+            ws.close(4001, "Invalid API key");
+            return;
+          }
+          apiKeyId = result.data.id;
         }
 
         const clientType = url.searchParams.get("clientType") || "agent";
         wsNameMap.set(ws, name);
         wsClientType.set(ws, clientType);
-        registerClient(ws, name, result.data.id);
+        registerClient(ws, name, apiKeyId);
         ws.send(JSON.stringify({ type: "registered", name }));
         logger.info({ name, clientType }, "ws client connected");
       },

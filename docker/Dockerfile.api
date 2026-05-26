@@ -1,0 +1,18 @@
+FROM oven/bun:1-debian AS base
+WORKDIR /app
+
+COPY package.json bun.lock ./
+COPY apps/api/package.json apps/api/
+COPY apps/web/package.json apps/web/
+COPY libs/core/package.json libs/core/
+RUN bun install --frozen-lockfile
+
+COPY libs/core/ libs/core/
+COPY apps/api/ apps/api/
+
+COPY docker/entrypoint-api.sh /app/entrypoint-api.sh
+RUN chmod +x /app/entrypoint-api.sh
+
+EXPOSE 4444
+
+CMD ["/app/entrypoint-api.sh"]

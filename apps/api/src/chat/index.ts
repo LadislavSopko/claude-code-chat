@@ -4,10 +4,10 @@ import type { Db } from "../db";
 import { schema } from "../db";
 import { checkApiKey } from "../auth/api-key-guard";
 
-export function chatRoutes(db: Db) {
+export function chatRoutes(db: Db, devMode = false) {
   return new Elysia({ prefix: "/api/chat" })
     .onBeforeHandle(async ({ request, set }) => {
-      return checkApiKey(db, request, set);
+      return checkApiKey(db, request, set, devMode);
     })
     .get("/rooms", async () => {
       return db.select().from(schema.rooms).where(eq(schema.rooms.status, "ACTIVE"));

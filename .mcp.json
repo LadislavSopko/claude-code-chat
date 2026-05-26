@@ -19,12 +19,11 @@
       ]
     },
     "claude-chat": {
-      "command": "/home/laco/.bun/bin/bun",
-      "args": ["src/client.ts"],
+      "command": "bunx",
+      "args": ["cc-chat-mcp"],
       "env": {
         "CLAUDE_CHAT_NAME": "claude",
-        "CLAUDE_CHAT_API_KEY": "dev-api-key-change-me",
-        "CLAUDE_CHAT_URL": "ws://localhost:3000"
+        "CLAUDE_CHAT_URL": "ws://localhost:4444"
       }
     },
     "ui-ticket-mcp": {

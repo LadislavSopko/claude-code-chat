@@ -1,0 +1,26 @@
+{
+  "name": "cc-chat-mcp",
+  "version": "0.1.3",
+  "description": "MCP server for Claude Code Chat — connects Claude Code sessions to a shared chat hub",
+  "type": "module",
+  "bin": {
+    "cc-chat-mcp": "./dist/client.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "keywords": [
+    "mcp",
+    "claude",
+    "claude-code",
+    "chat"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://nexus.0ics.ai/repository/npm-hosted/"
+  }
+}
